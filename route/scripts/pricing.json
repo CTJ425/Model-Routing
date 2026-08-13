@@ -1,0 +1,9 @@
+{
+  "_comment": "USD per million tokens. Verify against the official pricing page before trusting the USD columns. Keys are matched by prefix against the model id in the transcript.",
+  "cacheMultipliers": { "read": 0.1, "write5m": 1.25, "write1h": 2.0 },
+  "models": {
+    "claude-opus-":   { "in": 5.0, "out": 25.0 },
+    "claude-sonnet-": { "in": 3.0, "out": 15.0 },
+    "claude-haiku-":  { "in": 1.0, "out": 5.0 }
+  }
+}

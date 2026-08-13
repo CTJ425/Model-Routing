@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/CTJ425/Model-Routing/schema/route.config.schema.json",
+  "title": "route.config.json",
+  "description": "Per-project configuration for the route plugin. Written to .claude/route.config.json by /route:init. Every key is optional: the hooks deep-merge this file over their own defaults, so a partial file is valid.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": {
+      "type": "integer",
+      "description": "Config format version. 2 is current. A file with no version key is a v1 file and /route:init will upgrade it in place.",
+      "enum": [2]
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prod": {
+          "type": "array",
+          "description": "Repo-relative production-code locations. A trailing '/' means a directory prefix; anything else is a glob supporting **, * and ?.",
+          "items": { "type": "string" }
+        },
+        "test": {
+          "type": "array",
+          "description": "Globs identifying test files, which builder may not write.",
+          "items": { "type": "string" }
+        },
+        "docs": {
+          "type": "string",
+          "description": "Repo-relative directory holding the tracking records."
+        },
+        "specs": {
+          "type": "string",
+          "description": "Repo-relative directory holding per-task specs."
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "description": "Per-role model override, passed as the Agent call's `model` parameter. Any alias or full model id is accepted; it is not validated against a live model list. CLAUDE_CODE_SUBAGENT_MODEL, if set, outranks all of these.",
+      "additionalProperties": false,
+      "properties": {
+        "scout": { "type": "string" },
+        "builder": { "type": "string" },
+        "reviewer": { "type": "string" },
+        "scribe": { "type": "string" }
+      }
+    },
+    "bookkeeping": {
+      "type": "object",
+      "description": "Tracking records. With enabled=false the plugin does model routing only: no scribe, no record class in the guard, no counts in the session brief.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "timezone": {
+          "type": "string",
+          "description": "IANA timezone name written into record timestamps, e.g. UTC or Asia/Taipei."
+        },
+        "records": {
+          "type": "object",
+          "description": "Record family -> its hot file and its archive, both relative to paths.docs.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "hot": { "type": "string" },
+              "archive": { "type": "string" },
+              "keep": {
+                "type": "integer",
+                "description": "How many entries stay in the hot file before rolling to the archive.",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "openTaskPattern": {
+          "type": "string",
+          "description": "Python regex, applied per task entry with re.MULTILINE. A match means the entry is still open."
+        }
+      }
+    },
+    "language": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "artifacts": {
+          "type": "string",
+          "description": "Language the agents write records and reports in, e.g. en or zh-TW. Code and identifiers stay in English regardless."
+        }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mainSeverity": {
+          "type": "string",
+          "description": "What happens when the main session writes production code or a record.",
+          "enum": ["ask", "deny", "off"]
+        },
+        "readKB": {
+          "type": "integer",
+          "description": "Unbounded main-session Reads larger than this ask first. 0 disables the check.",
+          "minimum": 0
+        },
+        "scoutAt": {
+          "type": "integer",
+          "description": "Main-session discovery calls before the scout nudge. 0 disables it.",
+          "minimum": 0
+        },
+        "bashWriteDetection": {
+          "type": "boolean",
+          "description": "Heuristic detection of filesystem writes issued through Bash. Best-effort by construction."
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "type": "string",
+          "description": "always = review every builder round; risk = review when a trigger fires; never = the test is the only gate.",
+          "enum": ["always", "risk", "never"]
+        },
+        "nudge": {
+          "type": "boolean",
+          "description": "Whether a returning builder dispatch injects the review-policy reminder."
+        },
+        "triggers": {
+          "type": "array",
+          "description": "Replaces the skill's default six risk triggers when present.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "charsPerToken": {
+          "type": "number",
+          "description": "Characters per token used by /route:delta. 4 suits English; CJK text is nearer 1.5. Calibrate with `dispatch_delta.py --validate`.",
+          "exclusiveMinimum": 0
+        },
+        "pricingFile": {
+          "type": "string",
+          "description": "Path to a pricing table replacing the plugin's scripts/pricing.json. Relative paths resolve from the project root."
+        }
+      }
+    }
+  }
+}

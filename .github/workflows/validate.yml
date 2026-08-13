@@ -1,0 +1,51 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Compile every hook and script
+        run: python3 -m py_compile route/hooks/*.py route/scripts/*.py
+
+      - name: Install pytest
+        run: python3 -m pip install --quiet pytest
+
+      - name: Run the test suite
+        run: python3 -m pytest tests/ -q
+
+      - name: Every JSON file parses
+        run: |
+          python3 - <<'PY'
+          import glob, json, sys
+          bad = []
+          for path in glob.glob("**/*.json", recursive=True):
+              try:
+                  with open(path, encoding="utf-8") as fh:
+                      json.load(fh)
+              except Exception as exc:
+                  bad.append(f"{path}: {exc}")
+          if bad:
+              print("\n".join(bad))
+              sys.exit(1)
+          PY
+
+      - name: No project-specific residue in agent or skill prompts
+        run: |
+          # These strings are leftovers from the repo this plugin was extracted from.
+          # A generic plugin must not carry another project's timezone, incidents,
+          # file sizes, or stack vocabulary.
+          if grep -rniE 'Asia/Taipei|Task 91|405KB|Edge Function|cron\.job|English, always' \
+               route/agents/ route/skills/; then
+            echo "::error::project-specific residue found (see matches above)"
+            exit 1
+          fi

@@ -1,4 +1,5 @@
 {
+  "description": "Model-routing guards and observability for the route plugin",
   "hooks": {
     "SessionStart": [
       {
@@ -6,7 +7,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py\"",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py"],
             "timeout": 10
           }
         ]
@@ -18,7 +20,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/routing_guard.py\"",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_guard.py"],
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_guard.py"],
             "timeout": 10
           }
         ]
@@ -30,7 +44,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py\"",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py"],
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py"],
             "timeout": 10
           }
         ]
@@ -42,7 +68,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py\"",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py"],
             "timeout": 10
           }
         ]
@@ -54,8 +81,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py\"",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py"],
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py"],
+            "timeout": 5
           }
         ]
       }

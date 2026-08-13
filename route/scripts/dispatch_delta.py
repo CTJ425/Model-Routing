@@ -18,13 +18,14 @@ every later turn, so the dollar figure multiplies the net by the turns that foll
 Two honest caveats, restated in the report footer:
   * The benefit side is an UPPER BOUND. Main might have answered the same question with
     narrower reads than the subagent chose to make.
-  * Token counts are chars/4 (CHARS_PER_TOKEN). The `--validate` column checks that
-    estimate against main's own measured cache_read growth across clean dispatch turns.
+  * Token counts are chars/N (`audit.charsPerToken`, default 4). That ratio is tuned
+    for English; CJK text runs closer to 1.5 chars per token, so a Chinese/Japanese/
+    Korean project underestimates badly until `--validate` is used to recalibrate it.
 
 Usage (run from the project you want to measure, or set CLAUDE_PROJECT_DIR):
   python3 dispatch_delta.py            # every session, summary + per-role
   python3 dispatch_delta.py --detail   # one line per dispatch
-  python3 dispatch_delta.py --validate # chars/4 vs measured cache_read delta
+  python3 dispatch_delta.py --validate # chars/N vs measured cache_read delta
 """
 import argparse
 import glob
@@ -34,10 +35,39 @@ import statistics
 import sys
 from collections import defaultdict
 
-PROJECT = os.path.abspath(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
-CHARS_PER_TOKEN = 4.0
-# Cache read is billed at 0.1x the input rate; default to a $5/Mtok input model.
-USD_PER_TOKEN_REPLAY = 5.0 * 0.1 / 1e6
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "hooks"))
+sys.path.insert(0, _HERE)
+from _config import load_config, project_dir  # noqa: E402
+from routing_audit import CACHE_READ, rate  # noqa: E402
+
+PROJECT = project_dir()
+CFG = load_config(PROJECT)
+try:
+    CHARS_PER_TOKEN = float((CFG.get("audit") or {}).get("charsPerToken") or 4.0)
+except (TypeError, ValueError):
+    CHARS_PER_TOKEN = 4.0
+
+# Replay is billed as cache read: a multiple of the main model's input rate. Deriving
+# it from the model that actually ran beats a constant, but the constant has to stay
+# for the case where no priced model id appears in the transcripts.
+FALLBACK_USD_PER_TOKEN_REPLAY = 5.0 * 0.1 / 1e6
+PRICED_FROM = set()
+
+
+def replay_rate(path: str) -> float:
+    """-> USD per replayed token, from the model that did the most turns in `path`."""
+    turns = defaultdict(int)
+    for row in rows(path):
+        msg = row.get("message")
+        if isinstance(msg, dict) and msg.get("usage") and row.get("type") == "assistant":
+            turns[msg.get("model") or ""] += 1
+    for model, _ in sorted(turns.items(), key=lambda kv: -kv[1]):
+        price = rate(model)
+        if price:
+            PRICED_FROM.add(model)
+            return price[0] * CACHE_READ / 1e6
+    return FALLBACK_USD_PER_TOKEN_REPLAY
 
 
 def text_len(content) -> int:
@@ -136,6 +166,7 @@ def collect(session_path):
     if not disp:
         return []
     base = session_path[: -len(".jsonl")]
+    usd_per_token = replay_rate(session_path)
     out = []
     for meta_path in sorted(glob.glob(os.path.join(base, "subagents", "agent-*.meta.json"))):
         try:
@@ -162,7 +193,7 @@ def collect(session_path):
             "benefit": benefit,
             "net": benefit - cost,
             "remaining": remaining,
-            "usd": (benefit - cost) * remaining * USD_PER_TOKEN_REPLAY,
+            "usd": (benefit - cost) * remaining * usd_per_token,
             "sub_turns": sub_turns,
             "measured": measured,
             "prompt": d["prompt_chars"] / CHARS_PER_TOKEN,
@@ -179,7 +210,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--detail", action="store_true", help="one line per dispatch")
     ap.add_argument("--validate", action="store_true",
-                    help="compare chars/4 against measured cache_read growth")
+                    help="compare the chars/N estimate against measured cache_read growth")
     args = ap.parse_args()
 
     d = os.path.join(os.path.expanduser("~"), ".claude", "projects",
@@ -233,7 +264,7 @@ def main() -> int:
 
     if args.validate:
         v = [r for r in recs if r["measured"] is not None]
-        print(f"\n--- validate: chars/4 estimate vs measured cache_read growth (n={len(v)}) ---")
+        print(f"\n--- validate: chars/{CHARS_PER_TOKEN:g} estimate vs measured cache_read growth (n={len(v)}) ---")
         print(f"{'role':<12}{'estimated':>11}{'measured':>10}{'ratio':>8}")
         for r in sorted(v, key=lambda r: r["role"]):
             est = r["cost"]
@@ -244,9 +275,16 @@ def main() -> int:
             print(f"median ratio {med(ratios):.2f} — >1 means the dispatch turn also grew "
                   f"main's context by more than the prompt+report alone")
 
-    print("\nCaveats: benefit is an UPPER BOUND (main might have read less than the subagent "
-          f"chose to); tokens are chars/{CHARS_PER_TOKEN:.0f}; USD prices the net at the "
-          "default cache-read rate times the main turns that followed the dispatch.")
+    priced = (", ".join(sorted(PRICED_FROM)) if PRICED_FROM
+              else "a default $5/Mtok input rate — no priced model id was found")
+    print("\nCaveats: benefit is an UPPER BOUND (main might have read less than the "
+          f"subagent chose to); tokens are chars/{CHARS_PER_TOKEN:g}; USD prices the net "
+          f"at the cache-read rate of {priced} times the main turns that followed the "
+          "dispatch.")
+    print(f"chars/{CHARS_PER_TOKEN:g} is tuned for English and underestimates CJK text "
+          "badly (roughly 1.5 chars per token). On a Chinese/Japanese/Korean project, run "
+          "--validate and set audit.charsPerToken in .claude/route.config.json to the "
+          "ratio it reports.")
     return 0
 
 

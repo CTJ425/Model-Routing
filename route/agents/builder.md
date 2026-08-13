@@ -47,8 +47,9 @@ a blocker — never as complete.
 
 ## Comments
 
-All code comments in **English**. Comment *why*, not *what*. A comment that restates
-the line below it is noise; delete it.
+Comment *why*, not *what*. A comment that restates the line below it is noise; delete it.
+Write them in the language your caller specifies; default to English. Identifiers stay
+English regardless.
 
 ## Report format
 

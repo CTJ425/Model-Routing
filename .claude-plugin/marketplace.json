@@ -3,7 +3,8 @@
   "name": "route",
   "description": "Model-routing loop for Claude Code: a four-role SDLC topology with per-role model tiers.",
   "owner": {
-    "name": "zrchen"
+    "name": "CTJ425",
+    "url": "https://github.com/CTJ425"
   },
   "plugins": [
     {

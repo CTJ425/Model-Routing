@@ -18,9 +18,9 @@ wrong cost, and how much subjective judgement is involved.
 
 | Lane | Use when | Path |
 | --- | --- | --- |
-| **0 — inline** | The content is **already in context** and the edit is surgical — a typo, a version bump, a one-line fix. Touches no money/auth/schema/API/deploy behaviour, and you can name the verification command *before* editing | main session -> verify -> `scribe` if a record is owed |
-| **1 — bounded** (default) | A clear fix or feature inside known modules | `scout` (if the area is unmapped) -> spec -> `builder` -> `reviewer` -> `scribe` |
-| **2 — elevated risk** | Unknown-cause bug, cross-module change, money/auth/schema-touching maths, RLS, a migration, an external API, a cron/background job, or anything deployed | `scout` -> spec + failing tests -> `builder` -> `reviewer` -> adjudicate -> `scribe` |
+| **0 — inline** | The content is **already in context** and the edit is surgical — a typo, a version bump, a one-line fix. Trips none of the Step 4 review triggers, and you can name the verification command *before* editing | main session -> verify -> `route:scribe` if a record is owed |
+| **1 — bounded** (default) | A clear fix or feature inside known modules | `route:scout` (if the area is unmapped) -> brief -> `route:builder` -> `route:reviewer` (per Step 4 policy) -> `route:scribe` |
+| **2 — elevated risk** | Unknown-cause bug, cross-module change, or any of the Step 4 triggers known up front: persisted state, an authorization decision, a boundary another system depends on, or a silently-wrong calculation | `route:scout` -> spec + failing tests -> `route:builder` -> `route:reviewer` (always) -> adjudicate -> `route:scribe` |
 
 State the lane in one line before you act. If you pick Lane 0 for a tracked task,
 record why in the project's progress log.
@@ -32,8 +32,11 @@ Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
 
 ```json
 {
+  "version": 2,
   "paths": { "prod": ["src/"] },
-  "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" }
+  "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
+  "review": { "policy": "risk" },
+  "bookkeeping": { "enabled": true }
 }
 ```
 
@@ -44,6 +47,11 @@ plugin update would overwrite. If the file or the key is missing, dispatch with 
 `model` override and let the agent's frontmatter default apply. `/route:config` is how a
 user edits this file; never hand-edit an agent's frontmatter to change its tier.
 
+One override sits above both: the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
+outranks the per-invocation `model` parameter. If it is set in the user's environment,
+this step has no effect and every subagent runs on that model — say so rather than
+reporting a tier that is not in force. `/route:config` reports it when present.
+
 ## Step 1 — scout (haiku by default)
 
 Only when the affected area is not already mapped. Ask a specific question — never
@@ -53,9 +61,13 @@ it". You get back ~40 lines. This is the single largest token saving in the syst
 If you have made a dozen Read/Grep calls yourself, you are doing scout's work at several
 times the price; a hook will tell you so.
 
-Do not reach for the built-in `Explore` or `general-purpose` instead. They inherit the
-caller's model, so they do scout's job at the caller's price. A PreToolUse guard asks
-before letting one through; confirm only when you need a tool scout lacks.
+Dispatch it as `route:scout`. Do not reach for the built-in `Explore` or
+`general-purpose` instead — they inherit the caller's model, so they do scout's job at
+the caller's price. A PreToolUse guard asks before letting one through; confirm only
+when you need a tool scout lacks.
+
+Scout has no Bash. If the material to compress is command output, put the text in the
+dispatch prompt or write it to a file and give scout the path.
 
 ## Step 2 — the builder's input, sized by lane
 
@@ -84,23 +96,47 @@ which production files it may touch.
 
 ## Step 3 — build (sonnet by default)
 
-Dispatch `builder` with **only** its Step 2 input: the Lane 1 brief, or the Lane 2 spec
+Dispatch `route:builder` with **only** its Step 2 input: the Lane 1 brief, or the Lane 2 spec
 path plus test path. Never paste a spec file's contents — builder reads the file. Do not
 add advice or context; anything extra you say competes with the spec.
 
-Independent tasks go out as parallel `builder` calls in one turn, not sequential rounds.
+Independent tasks go out as parallel `route:builder` calls in one turn, not sequential rounds.
 
 ## Step 4 — review (sonnet by default)
 
-**The gate for ordinary work is the test passing**, not a second opinion — it is
-verifiable, costs nothing extra, and builder is required to report the command and its
-output. Take that as the pass and go to step 6.
+Check `review.policy` in `.claude/route.config.json`:
 
-**Dispatch `reviewer` when the change touches money, positions, fees, prices, auth/RLS,
-persistence, schema, API contracts, background jobs, or a user-visible calculation** —
-there a green test only proves the test agreed with the bug. Pass it the brief or spec
-path and builder's reported file list; it returns `PASS`/`FAIL` and findings, never
-fixes.
+| policy | behaviour |
+| --- | --- |
+| `always` | dispatch `route:reviewer` on every builder round |
+| `risk` (default) | dispatch when any trigger below fires |
+| `never` | never dispatch; the test is the only gate |
+
+Under `risk`, dispatch `route:reviewer` when **any** of these is true:
+
+1. **The change is not fully covered by a test that failed before and passes now.**
+   A green suite that never exercised the change proves nothing.
+2. It touches state that outlives the process — database, filesystem, cache, queue,
+   or anything persisted.
+3. It touches an authorization or access-control decision.
+4. It touches a boundary another system depends on — API shape, wire format, file
+   format, CLI flags, public function signatures.
+5. It touches a calculation whose wrong answer is **silent**: no exception, just a
+   wrong number.
+6. Builder reported anything under `BLOCKERS`.
+
+Trigger 1 is the one that fires most often and is the reason this step exists. The
+other five are all instances of "a green test only proves the test agreed with the bug".
+
+A project may replace this list with `review.triggers` in its config; when that key is
+present, use it instead.
+
+Pass reviewer the brief **or** the spec path, plus builder's reported file list and
+builder's `TESTS:` line. Reviewer has no Bash — it reads builder's reported command and
+result rather than re-running anything. It returns `PASS`/`FAIL` and findings, never fixes.
+
+If you skip review, say so in one line and name which trigger you checked. A silent
+skip is how this step stopped happening.
 
 ## Step 5 — adjudicate (main session only)
 
@@ -108,7 +144,7 @@ fixes.
 | --- | --- |
 | PASS, no findings | go to step 6 |
 | PASS with RISK | record the risk in the project's bug-tracking doc, go to step 6 |
-| FAIL, 1st time | write a fix instruction naming file + line + required post-condition; re-dispatch `builder` |
+| FAIL, 1st time | write a fix instruction naming file + line + required post-condition; re-dispatch `route:builder` |
 | FAIL, 2nd time | **stop dispatching.** The defect is in the spec ~80% of the time. Fix the spec, restart from step 3 |
 | FAIL, 3rd time | stop and ask the user. Do not loop |
 
@@ -116,10 +152,14 @@ Never forward reviewer's raw text to builder. Translate it into an instruction.
 
 ## Step 6 — record (haiku by default)
 
-Dispatch `scribe` with the outcome: task id, files changed, test counts, reviewer
-verdict, accepted risks, version. Do not update the tracking docs yourself — it is
-mechanical work at the most expensive rate in the system, and a hook will ask you to
-reconsider if you try.
+Skip this step entirely when `bookkeeping.enabled` is `false` — that project keeps no
+tracking docs and there is nothing for scribe to write.
+
+Otherwise dispatch `route:scribe` with the outcome: task id, files changed, test counts,
+reviewer verdict, accepted risks, version, and the timezone from
+`bookkeeping.timezone`. Do not update the tracking docs yourself — it is mechanical work
+at the most expensive rate in the system, and a hook will ask you to reconsider if you
+try.
 
 ## Escalate to the main session when
 
@@ -131,10 +171,10 @@ reconsider if you try.
 
 ## Verify the routing actually happened
 
-This plugin ships `routing_audit.py` and `dispatch_delta.py` under its own `hooks/`
-directory. They read the transcripts Claude Code already writes and report **cost** per
-model and per role — main thread and sidechain — plus whether a dispatch actually removed
-net tokens from the main session's context. Find the installed copy under this plugin's
-directory (list plugins, or look under `~/.claude/plugins/`) and run it with `python3`.
-Read the per-role split, not the token columns: one model and zero sidechain traffic
-means nothing was routed, whatever the plan said.
+Two commands read the transcripts Claude Code already writes and answer it with numbers:
+
+- `/route:audit` — cost per model and per role, main thread and subagents. Read the
+  per-role split, not the token columns: one model and zero subagent transcripts means
+  nothing was routed, whatever the plan said.
+- `/route:delta` — whether each dispatch actually removed net tokens from the main
+  session's context, rather than just moving cost to a cheaper model.
