@@ -19,8 +19,8 @@ Report it as fact, not as a suggestion to unset it.
 
 ## Showing
 
-Print the current `models` mapping, plus `review.policy` and any non-default `guard`
-values. Do not dump the whole file.
+Print the current `models` mapping, `review.policy`, bookkeeping enabled/disabled state,
+`language.artifacts`, and any non-default `guard` values. Do not dump the whole file.
 
 ## Changing
 
@@ -33,6 +33,9 @@ Parse `$ARGUMENTS` as `key=value` pairs and update just those keys:
 - A dotted key sets that path directly: `review.policy=always`, `guard.readKB=64`,
   `guard.mainSeverity=deny`, `bookkeeping.enabled=false`, `audit.charsPerToken=1.6`.
   Coerce `true`/`false` and numeric values to their JSON types, not strings.
+- For array values, accept a JSON array literal, for example
+  `review.triggers=["boundary","control_flow"]`, and validate each trigger against the
+  schema before writing it.
 - Reject a dotted key that is not in `${CLAUDE_PLUGIN_ROOT}/schema/route.config.schema.json`
   and say which keys are valid, rather than writing a key nothing reads.
 

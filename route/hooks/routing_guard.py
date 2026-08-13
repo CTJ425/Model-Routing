@@ -35,6 +35,7 @@ import json
 import os
 import re
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import (  # noqa: E402
@@ -84,6 +85,57 @@ BASH_WRITE_RE = re.compile(
     r"|(?:^|[\s|;&(`])(?:python3?|node|deno|bun)\b[^|;&]*?(?:open\s*\([^)]*['\"][wax]|writeFile)"
     r"|(?<![0-9<>])>>?(?!\s*(?:/dev/null|&\s*\d))"
 )
+BASH_VCS_MUTATION_RE = re.compile(
+    r"(?:^|[\s|;&(`])git\s+(?:add|commit|push|reset|checkout|switch|restore|clean|apply|"
+    r"cherry-pick|rebase|mv|rm)\b"
+)
+
+# The exact command shape scribe.md prescribes and nothing else: `cat >>`, one
+# one literal path target, an optional heredoc. A heredoc is a whole multi-line command
+# -- opener, body, terminator -- not something a single-line regex can capture, so the
+# grammar is applied in three parts: first line, then (when an opener is present) the
+# remainder as body + terminator. Any deviation -- a second redirect, a pipe, a chain,
+# substitution, an unquoted delimiter, a missing or malformed terminator, a stray
+# command after the terminator -- fails to match and falls through to `ask`. A positive
+# grammar instead of a denylist over shell strings: nothing needs to be enumerated to
+# be excluded.
+# Scribe may append through Bash, but truncation is never an allowed bookkeeping
+# operation. Prepending belongs to Edit, so the exception is deliberately `cat >>` only.
+_CAT_TARGET = r"cat[ \t]+>>[ \t]*([A-Za-z0-9._/-]+)"
+SCRIBE_CAT_PLAIN_RE = re.compile(_CAT_TARGET + r"[ \t]*")
+SCRIBE_CAT_HEREDOC_OPENER_RE = re.compile(
+    _CAT_TARGET + r"[ \t]*(<<-?)[ \t]*(?:'([^'\n]*)'|\"([^\"\n]*)\")[ \t]*"
+)
+
+
+def _scribe_redirect_target(command: str):
+    """Match the command against the two allowed shapes -- plain redirect or redirect
+    with a quoted heredoc -- and return the literal target path, or None if the whole
+    command does not fit the grammar.
+    """
+    stripped = command.rstrip()
+    first_line, _, remainder = stripped.partition("\n")
+
+    m = SCRIBE_CAT_PLAIN_RE.fullmatch(first_line)
+    if m and remainder == "":
+        return m.group(1)
+
+    mh = SCRIBE_CAT_HEREDOC_OPENER_RE.fullmatch(first_line)
+    if not mh:
+        return None
+    dashed = mh.group(2) == "<<-"
+    delimiter = mh.group(3) if mh.group(3) is not None else mh.group(4)
+
+    body_lines = remainder.split("\n")
+    terminator = body_lines[-1]
+    if dashed:
+        term_ok = re.fullmatch(r"\t*" + re.escape(delimiter), terminator) is not None
+    else:
+        term_ok = terminator == delimiter
+    if not term_ok:
+        return None
+    return mh.group(1)
+
 BASH_REASON = (
     "This Bash command looks like it writes to the filesystem, and `{role}` may not write "
     "{scope}. Writing through Bash routes around the file-tool guard; that is out of role, "
@@ -93,7 +145,7 @@ BASH_REASON = (
 REASONS = {
     ("main", "prod"): (
         "Main session is editing production code. That is expensive-model-priced "
-        "implementation: dispatch `builder` with a spec path (see the `route` skill), or "
+        "implementation: dispatch `builder` with an inline brief or spec (see the `route` skill), or "
         "confirm this is a Lane 0 edit small enough that a dispatch would cost more than "
         "the edit."
     ),
@@ -141,8 +193,6 @@ def classify(rel, cfg) -> str:
         return "record"
     if docs and (rel == docs or rel.startswith(docs + "/")):
         return "doc"
-    if rel.startswith("docs/"):
-        return "doc"
     if matches_any(rel, paths.get("test")):
         return "test"
     if matches_any(rel, paths.get("prod")):
@@ -175,6 +225,41 @@ def bad_stamps(body: str, now):
     return out
 
 
+def now_in_timezone(name: str):
+    """Return a naive wall-clock value in the configured IANA timezone.
+
+    `zoneinfo` is available on Python 3.9+. The POSIX fallback keeps the plugin's
+    Python 3.8 requirement without adding a dependency; each hook runs in its own
+    process, so temporarily changing TZ cannot affect the parent session.
+    """
+    name = (name or "").strip()
+    if not name or name.lower() in ("local", "system"):
+        return datetime.datetime.now()
+
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.datetime.now(ZoneInfo(name)).replace(tzinfo=None)
+    except (ImportError, KeyError, OSError, ValueError):
+        pass
+
+    if hasattr(time, "tzset"):
+        had_tz = "TZ" in os.environ
+        old_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = name
+            time.tzset()
+            return datetime.datetime.now()
+        except (OSError, ValueError):
+            pass
+        finally:
+            if had_tz:
+                os.environ["TZ"] = old_tz
+            else:
+                os.environ.pop("TZ", None)
+            time.tzset()
+    return datetime.datetime.now()
+
+
 def handle_dispatch(role, tool_input) -> None:
     spawned = (tool_input.get("subagent_type") or "").strip()
     if normalize_role(spawned) in DISCOVERY_AGENTS or spawned.lower() in DISCOVERY_AGENTS:
@@ -195,7 +280,8 @@ def handle_read(role, tool_input, project, cfg) -> None:
     if limit_kb <= 0 or not target:
         sys.exit(0)
     try:
-        size = os.path.getsize(target)
+        target_abs = target if os.path.isabs(target) else os.path.join(project, target)
+        size = os.path.getsize(target_abs)
     except OSError:
         sys.exit(0)
     if size > limit_kb * 1024:
@@ -204,19 +290,43 @@ def handle_read(role, tool_input, project, cfg) -> None:
     sys.exit(0)
 
 
-def handle_bash(role, tool_input, cfg) -> None:
+def _scribe_redirect_in_scope(command: str, project: str, cfg: dict) -> bool:
+    """Scribe's documented append (`cat >> <archive> <<'EOF'`) needs no confirmation
+    when the command matches that exact shape and the target resolves inside paths.docs.
+    """
+    target = _scribe_redirect_target(command)
+    if target is None:
+        return False
+    if any(part == ".." for part in target.split("/")):
+        return False
+    docs = (cfg["paths"].get("docs") or "").strip("/")
+    if not docs or docs == ".":
+        return False
+    project_real = os.path.realpath(project)
+    docs_real = os.path.realpath(os.path.join(project_real, docs))
+    target_abs = target if os.path.isabs(target) else os.path.join(project, target)
+    target_real = os.path.realpath(target_abs)
+    return target_real == docs_real or target_real.startswith(docs_real + os.sep)
+
+
+def handle_bash(role, tool_input, project, cfg) -> None:
     if not cfg["guard"].get("bashWriteDetection", True):
         sys.exit(0)
     if role not in RULES or role == "main":
         sys.exit(0)
     command = tool_input.get("command") or ""
+    if role == "scribe" and BASH_VCS_MUTATION_RE.search(command):
+        respond("deny", "[routing/scribe] Scribe records outcomes but does not mutate "
+                "version-control state.")
     if not BASH_WRITE_RE.search(command):
         sys.exit(0)
     if role in READ_ONLY_ROLES:
         respond("deny", "[routing/%s] " % role + BASH_REASON.format(
             role=role, scope="anything at all — it is read-only"))
+    if role == "scribe" and _scribe_redirect_in_scope(command, project, cfg):
+        sys.exit(0)
     scope = {
-        "builder": "outside the spec's Files list",
+        "builder": "outside the allowed production paths; the spec's Files list is checked by the agent",
         "scribe": "outside %s/" % cfg["paths"]["docs"],
     }.get(role, "here")
     respond("ask", "[routing/%s] " % role + BASH_REASON.format(role=role, scope=scope))
@@ -225,20 +335,40 @@ def handle_bash(role, tool_input, cfg) -> None:
 def handle_write(role, tool_input, project, cfg) -> None:
     rel = rel_path(tool_input.get("file_path"), project)
     if rel is None:
+        if role == "scribe":
+            respond("deny", "[routing/scribe] Scribe may write only inside the configured "
+                    "tracking directory.")
         sys.exit(0)
     cls = classify(rel, cfg)
 
+    rules = RULES.get(role)
+    if not rules:
+        # Unknown roles are outside this plugin's policy, including timestamp policy.
+        sys.exit(0)
+
+    docs = (cfg["paths"].get("docs") or "").strip("/")
+    if role == "scribe":
+        in_docs = bool(docs and docs != "." and
+                       (rel == docs or rel.startswith(docs + "/")))
+        if not in_docs or cls in ("prod", "test", "spec", "config"):
+            respond("deny", "[routing/scribe] Scribe may write only inside %s/." %
+                    (docs or "the configured tracking directory"))
+
+    if role == "builder" and cls != "prod":
+        reason = REASONS.get((role, cls)) or (
+            "Builder may write production-code paths only; the spec's Files list is "
+            "the remaining task-level scope.")
+        respond("deny", "[routing/builder] " + reason)
+
     if cls == "record":
         body = tool_input.get("new_string") or tool_input.get("content") or ""
-        now = datetime.datetime.now()
+        timezone = (cfg.get("bookkeeping") or {}).get("timezone") or "UTC"
+        now = now_in_timezone(timezone)
         ahead = bad_stamps(body, now)
         if ahead:
             respond("deny", "[routing/%s] " % role + TS_REASON.format(
                 stamps=", ".join(ahead[:3]), now=now.strftime("%Y-%m-%d %H:%M:%S")))
 
-    rules = RULES.get(role)
-    if not rules:
-        sys.exit(0)
     decision = rules.get(cls) or rules.get("*")
     if not decision:
         sys.exit(0)
@@ -274,7 +404,7 @@ def main() -> None:
     if tool == "Read":
         handle_read(role, tool_input, project, cfg)
     if tool == "Bash":
-        handle_bash(role, tool_input, cfg)
+        handle_bash(role, tool_input, project, cfg)
     handle_write(role, tool_input, project, cfg)
 
 

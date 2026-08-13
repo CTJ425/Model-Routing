@@ -12,8 +12,9 @@ four subagents do everything else.
 | **reviewer** | subagent | sonnet | reviewing a builder's diff against its spec | fix anything, propose a fix, or run commands |
 | **scribe** | subagent | haiku | recording outcomes into the tracking docs | write production code |
 
-Role boundaries are enforced by `PreToolUse` hooks, not prompt etiquette: ask a role to
-write outside its lane and the tool call itself is denied.
+Role boundaries are enforced by `PreToolUse` hooks where the path and role are
+classifiable. The hook cannot inspect an inline brief's per-task `Files` list, Bash is
+best-effort for roles that have Bash, and all hooks fail open on malformed input.
 
 ## Requirements
 
@@ -68,7 +69,12 @@ full shape.
   that the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, if set, outranks it.
 - `bookkeeping.enabled` — set `false` for model routing only: no `scribe`, no tracking
   docs, no record rules in the guard.
-- `review.policy` — `always`, `risk` (default), or `never`.
+- `review.policy` — the Boss's review-routing policy: `always`, `risk` (default), or
+  `never`. The PostToolUse nudge makes a required review visible but does not itself block
+  a user or model that ignores it.
+- `review.triggers` — optional IDs replacing the default risk checks:
+  `no_red_green`, `persistent_state`, `authorization`, `boundary`,
+  `silent_calculation`, `control_flow`, and `builder_blocker`.
 
 `/route:init` writes the initial file; `/route:config` edits it.
 
@@ -89,14 +95,17 @@ placeholder rates — check them against the official pricing page before quotin
 - **Writes issued through Bash.** The guard's shell-command detection is a regex
   heuristic, deliberately over-inclusive, and it will never be complete. The real
   enforcement is the `tools:` allowlist: `scout` and `reviewer` have no Bash at all.
-  For `builder` and `scribe` a suspected write raises an `ask`, because a shell command's
-  target cannot be resolved reliably.
+  For `builder` a suspected write raises an `ask`, because a shell command's target cannot
+  be resolved reliably. Scribe's exact `cat >> <literal-path>` append inside `paths.docs`
+  is allowed; other suspected writes ask.
 - **Anything outside the project directory.** Paths that resolve outside the repo root
   are not classified and not policed.
 - **Agents the plugin does not own.** An unrecognised `agent_type` passes every rule
   untouched; this guard governs the routing roles, not every agent in your repo.
 - **Whether the model actually used its cheap tier.** The hooks record dispatches;
   `/route:audit` is what checks the bill.
+- **The builder's inline `Files` list.** The guard enforces role-level path categories;
+  the Builder and Reviewer must check the task-specific list.
 
 Every guard is also fail-open by design: a malformed payload, an unreadable config, or a
 crash in the hook exits silently rather than blocking your session.

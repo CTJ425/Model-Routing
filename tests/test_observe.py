@@ -25,6 +25,14 @@ def test_brief_omits_the_open_line_when_no_records_exist(project):
     assert "Open now" not in text
 
 
+def test_brief_does_not_turn_one_unreadable_record_into_zero(project):
+    (project / "docs" / "agent" / "TASK.md").unlink()
+    (project / "docs" / "agent" / "BUG_FIX.md").write_text("### Bug 1\n")
+    text = brief(project)
+    assert "1 open bug(s)" in text
+    assert "task(s)" not in text
+
+
 def test_brief_counts_only_unfinished_tasks(project):
     (project / "docs" / "agent" / "TASK.md").write_text(
         "### Task 1\n- **Status**: ✅ DONE\n\n"
@@ -110,6 +118,29 @@ def test_nudge_can_be_switched_off(project):
     assert dispatch_return(project, "route:builder") is None
 
 
+def test_nudge_uses_configured_review_triggers(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"policy": "risk", "triggers": ["boundary"]}
+    write_config(project, cfg)
+    text = dispatch_return(project, "route:builder")
+    assert "a boundary another system depends on" in text
+    assert "persisted state" not in text
+
+
+def test_always_policy_is_explicit_in_the_nudge(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"policy": "always"}
+    write_config(project, cfg)
+    assert "every builder round" in dispatch_return(project, "route:builder")
+
+
+def test_empty_risk_triggers_are_explicitly_reported(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"policy": "risk", "triggers": []}
+    write_config(project, cfg)
+    assert "no automatic risk triggers" in dispatch_return(project, "route:builder")
+
+
 def test_nudge_does_not_fire_inside_a_subagent(project):
     assert dispatch_return(project, "route:builder", agent_type="route:builder") is None
 
@@ -119,9 +150,11 @@ def test_nudge_does_not_fire_inside_a_subagent(project):
 def test_subagent_events_are_logged_with_transcript_paths(project):
     run_observe({"hook_event_name": "SubagentStop", "session_id": "t1",
                  "agent_type": "route:builder", "agent_id": "a1",
+                 "effort": "low",
                  "transcript_path": "/tmp/main.jsonl",
                  "agent_transcript_path": "/tmp/agent-a1.jsonl"}, project)
     rows = [json.loads(line) for line in
             (project / ".claude" / "routing" / "dispatch.jsonl").read_text().splitlines()]
     assert rows[0]["agent_transcript_path"] == "/tmp/agent-a1.jsonl"
     assert rows[0]["transcript_path"] == "/tmp/main.jsonl"
+    assert rows[0]["effort"] == "low"

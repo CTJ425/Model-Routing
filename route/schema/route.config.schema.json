@@ -130,8 +130,19 @@
         },
         "triggers": {
           "type": "array",
-          "description": "Replaces the skill's default six risk triggers when present.",
-          "items": { "type": "string" }
+          "description": "Replaces the skill's default risk triggers when present. Empty means no automatic risk trigger.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "no_red_green",
+              "persistent_state",
+              "authorization",
+              "boundary",
+              "silent_calculation",
+              "control_flow",
+              "builder_blocker"
+            ]
+          }
         }
       }
     },

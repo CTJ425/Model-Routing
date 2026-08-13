@@ -36,7 +36,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import (  # noqa: E402
-    load_config, normalize_role, project_dir,
+    DEFAULT_REVIEW_TRIGGERS, load_config, normalize_role, project_dir,
 )
 
 REPEAT_EVERY = 8
@@ -50,12 +50,14 @@ def routing_dir(payload) -> str:
 
 
 def log_dispatch(payload, d: str) -> None:
+    effort = payload.get("effort")
+    effort_level = effort.get("level") if isinstance(effort, dict) else effort
     row = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "event": payload.get("hook_event_name"),
         "agent_type": payload.get("agent_type"),
         "agent_id": payload.get("agent_id"),
-        "effort": (payload.get("effort") or {}).get("level"),
+        "effort": effort_level,
         "session": payload.get("session_id"),
         # Recorded so the audit scripts read a path instead of reconstructing one.
         "transcript_path": payload.get("transcript_path"),
@@ -87,17 +89,45 @@ BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or 
   dispatches `Explore`/`general-purpose`, or issues an unbounded Read over {read_kb}KB.
   An `ask` is policy, not an obstacle: take the cheaper path it names."""
 
-OPEN_LINE = "\n- **Open now:** {tasks} task(s), {bugs} open bug(s)."
+REVIEW_TRIGGER_TEXT = {
+    "no_red_green": "the change lacks a test that failed before and passes now",
+    "persistent_state": "it touches state that outlives the process",
+    "authorization": "it touches an authorization or access-control decision",
+    "boundary": "it touches a boundary another system depends on",
+    "silent_calculation": "it touches a calculation whose wrong answer is silent",
+    "control_flow": "it changes control flow, error handling, concurrency, retry, or timeout behaviour",
+    "builder_blocker": "builder reported a blocker",
+}
 
-REVIEW_NUDGE = (
-    "[routing] `builder` just returned. Before recording, apply the Step 4 review policy: "
-    "review is required if the change is not covered by a test that failed before and "
-    "passes now, or if it touches persisted state, an authorization decision, a boundary "
-    "another system depends on, a silently-wrong calculation, or builder reported a "
-    "blocker. If you are skipping review, name in one line which of those you checked. If "
-    "you are not skipping, dispatch `route:reviewer` now with the brief, builder's file "
-    "list, and builder's TESTS line."
-)
+
+def review_nudge(cfg) -> str:
+    review = cfg.get("review") or {}
+    policy = review.get("policy", "risk")
+    if policy == "always":
+        condition = "every builder round"
+    else:
+        configured = review.get("triggers")
+        trigger_ids = (DEFAULT_REVIEW_TRIGGERS if configured is None else configured)
+        if isinstance(trigger_ids, list):
+            clauses = [REVIEW_TRIGGER_TEXT.get(str(item),
+                       "the configured trigger `%s`" % item) for item in trigger_ids]
+        else:
+            clauses = list(REVIEW_TRIGGER_TEXT.values())
+        if not clauses:
+            return (
+                "[routing] `builder` just returned. `review.policy` is `risk`, but no "
+                "automatic risk triggers are configured. Record that review was skipped, "
+                "or dispatch `route:reviewer` if your task needs an explicit review."
+            )
+        condition = " or ".join(clauses)
+
+    return (
+        "[routing] `builder` just returned. Before moving on, apply the Step 4 review "
+        "policy: review is required for %s. If you are skipping review, name in one "
+        "line which trigger you checked. If you are not skipping, dispatch "
+        "`route:reviewer` now with the brief, builder's file list, and builder's "
+        "VERIFY line."
+    ) % condition
 
 
 def _hot(cfg, key):
@@ -149,10 +179,15 @@ def emit_brief(payload) -> None:
     )
     if bookkeeping:
         tasks, bugs = open_counts(project, cfg)
-        # Printing "? task(s)" teaches the session to distrust the whole brief.
-        if tasks is not None or bugs is not None:
-            text += OPEN_LINE.format(tasks=tasks if tasks is not None else 0,
-                                     bugs=bugs if bugs is not None else 0)
+        # Never turn an unreadable file into a fabricated zero. Omit only the unavailable
+        # count; if both are unavailable, omit the whole line.
+        counts = []
+        if tasks is not None:
+            counts.append("%d task(s)" % tasks)
+        if bugs is not None:
+            counts.append("%d open bug(s)" % bugs)
+        if counts:
+            text += "\n- **Open now:** " + ", ".join(counts) + "."
 
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "SessionStart",
@@ -202,7 +237,7 @@ def handle_dispatch_return(payload) -> None:
         return  # reviewer returning is the normal path; silence is correct there
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PostToolUse",
-        "additionalContext": REVIEW_NUDGE,
+        "additionalContext": review_nudge(cfg),
     }}))
 
 

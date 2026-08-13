@@ -20,6 +20,18 @@ import re
 
 MAIN_ALIASES = {"", "main", "default", "root", "none"}
 
+# Stable names let the skill, the review nudge, and project configuration refer to
+# the same policy without copying prose into three different files.
+DEFAULT_REVIEW_TRIGGERS = (
+    "no_red_green",
+    "persistent_state",
+    "authorization",
+    "boundary",
+    "silent_calculation",
+    "control_flow",
+    "builder_blocker",
+)
+
 DEFAULTS = {
     "version": 2,
     "paths": {
@@ -103,7 +115,11 @@ def rel_path(target: str, project: str):
     if not target:
         return None
     try:
-        rel = os.path.relpath(os.path.abspath(target), project)
+        project_real = os.path.realpath(os.path.abspath(project))
+        target_text = os.fspath(target)
+        target_abs = (target_text if os.path.isabs(target_text)
+                      else os.path.join(project_real, target_text))
+        rel = os.path.relpath(os.path.realpath(target_abs), project_real)
     except ValueError:  # different drive on Windows
         return None
     rel = rel.replace(os.sep, "/")
