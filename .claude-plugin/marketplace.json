@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "route",
+  "description": "Model-routing loop for Claude Code: a four-role SDLC topology with per-role model tiers.",
+  "owner": {
+    "name": "zrchen"
+  },
+  "plugins": [
+    {
+      "name": "route",
+      "description": "Main thread plans and adjudicates; scout (haiku) maps and compresses; builder (sonnet) implements; reviewer (sonnet) checks risk work; scribe (haiku) records. Role boundaries enforced by PreToolUse hooks, not prompt etiquette.",
+      "source": "./route",
+      "category": "ai",
+      "keywords": [
+        "multi-agent",
+        "orchestration",
+        "tdd",
+        "token-budget",
+        "model-routing"
+      ]
+    }
+  ]
+}

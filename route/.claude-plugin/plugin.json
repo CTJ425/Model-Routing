@@ -1,0 +1,15 @@
+{
+  "name": "route",
+  "version": "0.1.0",
+  "description": "A model-routing loop for Claude Code: the main thread plans, writes specs, and adjudicates; scout (haiku) maps the codebase and compresses logs; builder (sonnet) implements; reviewer (sonnet) checks risk work; scribe (haiku) records outcomes. Role boundaries are enforced by PreToolUse hooks, not prompt etiquette. Per-role model tiers are configurable per project via /route:config.",
+  "author": {
+    "name": "zrchen"
+  },
+  "keywords": [
+    "multi-agent",
+    "orchestration",
+    "tdd",
+    "token-budget",
+    "model-routing"
+  ]
+}
