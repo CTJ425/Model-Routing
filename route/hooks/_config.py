@@ -69,6 +69,7 @@ DEFAULTS = {
         "scoutAt": 12,
         "bashWriteDetection": True,
     },
+    "scout": {"enabled": True},
     "review": {"policy": "risk", "nudge": True},
     "audit": {"charsPerToken": 4.0},
 }

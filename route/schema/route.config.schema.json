@@ -80,6 +80,16 @@
         }
       }
     },
+    "scout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether scout may be dispatched. false removes it from the guard's recommendations and the session brief's roster, and Step 1 of the route skill is skipped."
+        }
+      }
+    },
     "language": {
       "type": "object",
       "additionalProperties": false,

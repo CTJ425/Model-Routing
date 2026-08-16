@@ -58,6 +58,17 @@ def test_brief_reports_the_configured_read_threshold(project):
     assert "over 64KB" in brief(project)
 
 
+def test_brief_omits_scout_from_roster_when_disabled(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["scout"] = {"enabled": False}
+    write_config(project, cfg)
+    assert "scout` reads and compresses" not in brief(project)
+
+
+def test_brief_includes_scout_in_roster_by_default(project):
+    assert "`scout` reads and compresses" in brief(project)
+
+
 # --- discovery counter ---
 
 def discovery(project, session="t1"):
@@ -85,6 +96,23 @@ def test_session_end_clears_the_counter(project):
     run_observe({"hook_event_name": "SessionEnd", "session_id": "t1"}, project)
     assert not list((project / ".claude" / "routing" / "state").iterdir())
     assert discovery(project) is None  # count restarted from one
+
+
+def test_discovery_nudge_suppressed_when_scout_disabled(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["scout"] = {"enabled": False}
+    write_config(project, cfg)
+    for _ in range(12):
+        assert discovery(project) is None
+
+
+def test_discovery_nudge_fires_when_scout_enabled_explicitly(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["scout"] = {"enabled": True}
+    write_config(project, cfg)
+    for _ in range(11):
+        assert discovery(project) is None
+    assert "12 discovery calls" in discovery(project)
 
 
 # --- review nudge ---

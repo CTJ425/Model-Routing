@@ -80,8 +80,8 @@ BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or 
 - **Cost here is context replay, not output.** Replaying context into the main
   session's window is billed on every remaining turn of the session, so bulk content
   goes to a subagent even when the task looks trivial.
-- **Roster.** This session plans, writes specs, and adjudicates. `scout` reads and
-  compresses; `builder` implements; `reviewer` checks risk work{scribe_clause}.
+- **Roster.** This session plans, writes specs, and adjudicates.{scout_clause} `builder`
+  implements; `reviewer` checks risk work{scribe_clause}.
   Delegation is pre-authorized — dispatch without asking. Dispatch by scoped name
   (`route:scout`, `route:builder`, ...). Per-role model tiers live in
   `.claude/route.config.json` (see `/route:config`).
@@ -171,9 +171,11 @@ def emit_brief(payload) -> None:
     project = project_dir(payload)
     cfg = load_config(project)
     bookkeeping = bool((cfg.get("bookkeeping") or {}).get("enabled"))
+    scout_enabled = (cfg.get("scout") or {}).get("enabled", True)
 
     text = BRIEF_HEAD.format(
         read_kb=cfg["guard"].get("readKB", 32),
+        scout_clause=" `scout` reads and compresses;" if scout_enabled else "",
         scribe_clause="; `scribe` records" if bookkeeping else "",
         record_clause=" or a tracking record" if bookkeeping else "",
     )
@@ -208,6 +210,8 @@ def count_discovery(payload, d: str) -> int:
 def handle_discovery(payload, d: str) -> None:
     n = count_discovery(payload, d)
     cfg = load_config(project_dir(payload))
+    if not (cfg.get("scout") or {}).get("enabled", True):
+        return
     try:
         threshold = int(os.environ.get("ROUTING_SCOUT_AT")
                         or cfg["guard"].get("scoutAt", 12))

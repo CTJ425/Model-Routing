@@ -9,7 +9,7 @@ import json
 import pytest
 
 from conftest import BASE_CONFIG, write_config
-from helpers import decision, run_guard
+from helpers import decision, reason, run_guard
 from _config import rel_path
 
 
@@ -126,6 +126,17 @@ def test_main_large_unbounded_read_asks(project):
     assert decision(read("main", str(big), project, limit=100)) is None
 
 
+def test_read_reason_drops_scout_when_disabled(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["scout"] = {"enabled": False}
+    write_config(project, cfg)
+    big = project / "big.md"
+    big.write_text("x" * 40 * 1024)
+    got = read("main", str(big), project)
+    assert decision(got) == "ask"
+    assert "scout" not in reason(got)
+
+
 # --- Bash write detection ---
 
 @pytest.mark.parametrize("role,command,want", [
@@ -171,6 +182,16 @@ def test_discovery_dispatch(spawned, want, project):
     got = run_guard({"tool_name": "Agent", "agent_type": "",
                      "tool_input": {"subagent_type": spawned}}, project)
     assert decision(got) == want
+
+
+def test_discovery_reason_drops_scout_when_disabled(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["scout"] = {"enabled": False}
+    write_config(project, cfg)
+    got = run_guard({"tool_name": "Agent", "agent_type": "",
+                     "tool_input": {"subagent_type": "Explore"}}, project)
+    assert decision(got) == "ask"
+    assert "scout" not in reason(got)
 
 
 # --- fail-open ---

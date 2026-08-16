@@ -64,6 +64,7 @@ Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
   "version": 2,
   "paths": { "prod": ["src/"] },
   "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
+  "scout": { "enabled": true },
   "review": { "policy": "risk" },
   "bookkeeping": { "enabled": true }
 }
@@ -86,9 +87,11 @@ prose in reports and records; code, paths, identifiers, and commit messages rema
 
 ## Step 1 — scout (haiku by default)
 
-Only when the affected area is not already mapped. Ask a specific question — never
-"look at the report pipeline", always "where is X chosen, who calls it, which tests cover
-it". You get back ~40 lines. This is the single largest token saving in the system.
+Skip this step entirely when `scout.enabled` is `false` in `.claude/route.config.json`
+— go straight to the next step with what you already know. Otherwise: only when the
+affected area is not already mapped. Ask a specific question — never "look at the report
+pipeline", always "where is X chosen, who calls it, which tests cover it". You get back
+~40 lines. This is the single largest token saving in the system.
 
 If you have made a dozen Read/Grep calls yourself, you are doing scout's work at several
 times the price; a hook will tell you so.

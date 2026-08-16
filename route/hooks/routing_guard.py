@@ -52,6 +52,12 @@ READ_REASON = (
     "`offset`/`limit` for just the part you need."
 )
 
+READ_REASON_NO_SCOUT = (
+    "Reading {name} ({kb}KB) into the main session's context re-bills it on every "
+    "remaining turn — context replay is most of a routed session's cost. Re-issue this "
+    "Read with `offset`/`limit` for just the part you need."
+)
+
 ARCHIVE_REASON = (
     "`scribe` must not read {name} — an archive is larger than this role's context and "
     "there is never a need. Prepend with `Edit` anchored on the file's header line, "
@@ -73,6 +79,12 @@ DISCOVERY_REASON = (
     "highest rate in the system. `scout` is the same job on a cheap tier with a 40-line "
     "output ceiling: dispatch it with a specific question instead. Confirm only if you "
     "need a tool scout lacks."
+)
+
+DISCOVERY_REASON_NO_SCOUT = (
+    "`{name}` inherits this session's model, so it maps the codebase at or near the "
+    "highest rate in the system. Confirm only if a built-in discovery agent is "
+    "genuinely required."
 )
 
 # Best-effort: does this shell command look like it writes to the filesystem?
@@ -260,10 +272,12 @@ def now_in_timezone(name: str):
     return datetime.datetime.now()
 
 
-def handle_dispatch(role, tool_input) -> None:
+def handle_dispatch(role, tool_input, cfg) -> None:
     spawned = (tool_input.get("subagent_type") or "").strip()
     if normalize_role(spawned) in DISCOVERY_AGENTS or spawned.lower() in DISCOVERY_AGENTS:
-        respond("ask", "[routing/%s] " % role + DISCOVERY_REASON.format(name=spawned))
+        scout_enabled = (cfg.get("scout") or {}).get("enabled", True)
+        template = DISCOVERY_REASON if scout_enabled else DISCOVERY_REASON_NO_SCOUT
+        respond("ask", "[routing/%s] " % role + template.format(name=spawned))
     sys.exit(0)
 
 
@@ -285,7 +299,9 @@ def handle_read(role, tool_input, project, cfg) -> None:
     except OSError:
         sys.exit(0)
     if size > limit_kb * 1024:
-        respond("ask", "[routing/main] " + READ_REASON.format(
+        scout_enabled = (cfg.get("scout") or {}).get("enabled", True)
+        template = READ_REASON if scout_enabled else READ_REASON_NO_SCOUT
+        respond("ask", "[routing/main] " + template.format(
             name=os.path.basename(target), kb=size // 1024))
     sys.exit(0)
 
@@ -400,7 +416,7 @@ def main() -> None:
     cfg = load_config(project)
 
     if tool in ("Agent", "Task"):
-        handle_dispatch(role, tool_input)
+        handle_dispatch(role, tool_input, cfg)
     if tool == "Read":
         handle_read(role, tool_input, project, cfg)
     if tool == "Bash":
