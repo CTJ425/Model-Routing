@@ -35,12 +35,42 @@ Then, in any target repo:
 /route:config    # view or change which model each role uses in this project
 ```
 
-## The loop
+## Architecture & Routing Sequence
+
+![route Architecture](docs/architecture.svg)
+
+### Routing Lifecycle & Timing Steps
+
+The model-routing loop operates across 7 distinct steps with automated role boundary enforcement and adjudication loops:
 
 ```
-Boss classifies the lane -> scout (if unmapped) -> Boss writes spec/brief
-  -> builder -> reviewer (per review policy) -> Boss adjudicates -> scribe records
+[0. Classify Lane] ──► [1. Scout (Map)] ──► [2. Boss (Spec/Brief)] ──► [3. Builder (Code)]
+                                                                               │
+[6. Scribe (Record)] ◄── [5. Boss (Adjudicate)] ◄── [4. Reviewer (Risk Check)] ◄┘
+         ▲                        │
+         └──────── (Lane 0) ──────┴──► [Adjudication Loops: Fix / Re-spec / Escalate]
 ```
+
+1. **Step 0 — Classify Lane & Dispatch Floor Check (`Boss`)**:
+   - Evaluates risk, inference requirements, and checks if task size exceeds subagent cold-start overhead.
+   - **Lane 0 (Inline Surgical)**: Single-line fixes/version bumps below dispatch floor. Boss edits directly, verifies, and records inline.
+   - **Lane 1 (Bounded Feature/Fix)**: Standard changes inside known modules. Boss drafts an inline brief.
+   - **Lane 2 (Elevated Risk)**: Complex bugs, state/DB changes, auth, API boundaries. Boss drafts a full spec file with failing tests.
+2. **Step 1 — Codebase Mapping (`scout` | Haiku default)**:
+   - Dispatched only when the target area is unmapped. Performs read-only scans and returns a concise ~40-line structural summary.
+3. **Step 2 — Spec / Brief Authoring (`Boss` | Session Model)**:
+   - High-tier model writes task contract, exhaustive `Files` list, verify command, and non-goals. Boss never writes production code.
+4. **Step 3 — Implementation & Build (`builder` | Sonnet default)**:
+   - Reads spec/brief, implements changes strictly within the specified file list, and runs verification and test commands.
+5. **Step 4 — Review & Trigger Evaluation (`reviewer` | Sonnet default)**:
+   - Triggered based on `review.policy` (`always`, `risk`, `never`). Evaluates diff against 7 risk triggers (`no_red_green`, `persistent_state`, `authorization`, `boundary`, `silent_calculation`, `control_flow`, `builder_blocker`).
+6. **Step 5 — Adjudication & Feedback Loops (`Boss` | Session Model)**:
+   - **PASS**: Proceeds to Step 6.
+   - **FAIL (1st time)**: Boss writes targeted fix instructions (file + line + post-condition) and re-dispatches `builder`.
+   - **FAIL (2nd time)**: Defect is in the spec (~80% probability). Boss fixes spec and restarts build.
+   - **FAIL (3rd time)**: Halts loop and escalates to the user.
+7. **Step 6 — Bookkeeping & Audit Logging (`scribe` | Haiku default)**:
+   - Appends verified outcome, test counts, lint results, reviewer verdicts, and risks to `docs/agent/PROGRESS.md`, `TASK.md`, and `BUG_FIX.md`.
 
 Load the `route` skill (or just start a feature or bug — the SessionStart hook reminds
 the session it delegates) and it walks this loop step by step, including when to skip a

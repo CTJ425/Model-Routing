@@ -1,0 +1,365 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1020" width="100%" height="100%" style="background:#0d1117; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f141c"/>
+      <stop offset="100%" stop-color="#0a0d14"/>
+    </linearGradient>
+    <linearGradient id="boss-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2d2206"/>
+      <stop offset="100%" stop-color="#1c1603"/>
+    </linearGradient>
+    <linearGradient id="scout-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#092540"/>
+      <stop offset="100%" stop-color="#061626"/>
+    </linearGradient>
+    <linearGradient id="builder-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a3319"/>
+      <stop offset="100%" stop-color="#051f0e"/>
+    </linearGradient>
+    <linearGradient id="reviewer-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#261642"/>
+      <stop offset="100%" stop-color="#150a28"/>
+    </linearGradient>
+    <linearGradient id="scribe-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#082b30"/>
+      <stop offset="100%" stop-color="#04181c"/>
+    </linearGradient>
+    <linearGradient id="guard-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#341315"/>
+      <stop offset="100%" stop-color="#1d080a"/>
+    </linearGradient>
+
+    <!-- Markers -->
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#3fb950"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#bc8cff"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#f0883e"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#39c5cf"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#8b949e"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#f85149"/>
+    </marker>
+
+    <!-- Filters -->
+    <filter id="card-shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1240" height="1020" fill="url(#bg-grad)" rx="12"/>
+  <rect width="1238" height="1018" x="1" y="1" fill="none" stroke="#30363d" stroke-width="1.5" rx="12"/>
+
+  <!-- ==================== HEADER ==================== -->
+  <g id="header">
+    <rect x="25" y="20" width="1190" height="70" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <circle cx="55" cy="55" r="16" fill="#1f6feb" opacity="0.2"/>
+    <text x="55" y="61" font-size="18" text-anchor="middle" fill="#58a6ff">⇄</text>
+    
+    <text x="85" y="47" font-size="20" font-weight="700" fill="#f0f6fc">route Architecture &amp; Model-Routing Timing Sequence</text>
+    <text x="85" y="68" font-size="13" fill="#8b949e">Tiered multi-agent orchestration for Claude Code: delegating mechanical bulk to cheap models while keeping high-tier reasoning in main thread.</text>
+    
+    <!-- Config badge -->
+    <rect x="1035" y="38" width="160" height="34" rx="6" fill="#21262d" stroke="#388bfd" stroke-width="1"/>
+    <text x="1115" y="59" font-size="12" font-weight="600" text-anchor="middle" fill="#58a6ff">.claude/route.config.json</text>
+  </g>
+
+  <!-- ==================== TOP SECTION: ARCHITECTURE & ROLES ==================== -->
+  <g id="architecture-roles">
+    <!-- Section Title -->
+    <text x="30" y="115" font-size="14" font-weight="700" fill="#7d8590" letter-spacing="1">1. SYSTEM ARCHITECTURE &amp; ROLE BOUNDARIES</text>
+
+    <!-- 1. The Boss Card -->
+    <g id="role-boss" filter="url(#card-shadow)">
+      <rect x="25" y="130" width="280" height="235" rx="10" fill="url(#boss-grad)" stroke="#d29922" stroke-width="1.5"/>
+      <rect x="25" y="130" width="280" height="38" rx="10" fill="#3d2c08" stroke="#d29922" stroke-width="1"/>
+      <text x="42" y="154" font-size="15" font-weight="700" fill="#f0b72f">👑 Boss (Main Thread)</text>
+      <rect x="215" y="139" width="78" height="20" rx="4" fill="#5a3e06"/>
+      <text x="254" y="153" font-size="11" font-weight="600" fill="#f8e3a1" text-anchor="middle">Session Tier</text>
+
+      <text x="40" y="190" font-size="12" font-weight="600" fill="#e3b341">Responsibilities:</text>
+      <text x="40" y="208" font-size="12" fill="#c9d1d9">• Task Classification (Lanes 0 / 1 / 2)</text>
+      <text x="40" y="226" font-size="12" fill="#c9d1d9">• Writes Briefs, Specs &amp; Failing Tests</text>
+      <text x="40" y="244" font-size="12" fill="#c9d1d9">• Adjudicates Review Findings</text>
+      <text x="40" y="262" font-size="12" fill="#c9d1d9">• Dispatches &amp; coordinates Subagents</text>
+
+      <rect x="35" y="280" width="260" height="68" rx="6" fill="#181303" stroke="#875305" stroke-width="1"/>
+      <text x="43" y="298" font-size="11" font-weight="700" fill="#ff7b72">⛔ MUST NEVER:</text>
+      <text x="43" y="316" font-size="11" fill="#f0883e">• Directly write production code</text>
+      <text x="43" y="333" font-size="11" fill="#f0883e">• Update tracking docs (Lane 1/2)</text>
+    </g>
+
+    <!-- Subagent Pool Container -->
+    <g id="subagents-pool" filter="url(#card-shadow)">
+      <rect x="320" y="130" width="595" height="235" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+      <rect x="320" y="130" width="595" height="38" rx="10" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+      <text x="338" y="154" font-size="15" font-weight="700" fill="#f0f6fc">🤖 Subagent Pool (Isolated Worktree &amp; Context)</text>
+      <text x="760" y="154" font-size="12" fill="#8b949e">Configurable per role</text>
+
+      <!-- Scout -->
+      <g id="role-scout">
+        <rect x="335" y="178" width="270" height="82" rx="6" fill="url(#scout-grad)" stroke="#388bfd" stroke-width="1"/>
+        <text x="348" y="198" font-size="13" font-weight="700" fill="#58a6ff">🔍 scout</text>
+        <rect x="525" y="185" width="68" height="18" rx="4" fill="#0c2d6b"/>
+        <text x="559" y="198" font-size="10" font-weight="600" fill="#79c0ff" text-anchor="middle">haiku default</text>
+        <text x="348" y="218" font-size="11" fill="#c9d1d9">• Maps codebase &amp; compresses logs</text>
+        <text x="348" y="234" font-size="11" fill="#c9d1d9">• Returns ~40 lines summary to Boss</text>
+        <text x="348" y="250" font-size="10.5" fill="#f85149">⛔ Read-only, no write, no Bash</text>
+      </g>
+
+      <!-- Builder -->
+      <g id="role-builder">
+        <rect x="625" y="178" width="275" height="82" rx="6" fill="url(#builder-grad)" stroke="#2ea043" stroke-width="1"/>
+        <text x="638" y="198" font-size="13" font-weight="700" fill="#3fb950">🔨 builder</text>
+        <rect x="815" y="185" width="72" height="18" rx="4" fill="#0e4429"/>
+        <text x="851" y="198" font-size="10" font-weight="600" fill="#7ee787" text-anchor="middle">sonnet default</text>
+        <text x="638" y="218" font-size="11" fill="#c9d1d9">• Implements spec / brief into code</text>
+        <text x="638" y="234" font-size="11" fill="#c9d1d9">• Runs verify &amp; test suite</text>
+        <text x="638" y="250" font-size="10.5" fill="#f85149">⛔ Never edits specs or tests</text>
+      </g>
+
+      <!-- Reviewer -->
+      <g id="role-reviewer">
+        <rect x="335" y="270" width="270" height="82" rx="6" fill="url(#reviewer-grad)" stroke="#8957e5" stroke-width="1"/>
+        <text x="348" y="290" font-size="13" font-weight="700" fill="#bc8cff">🧐 reviewer</text>
+        <rect x="525" y="277" width="68" height="18" rx="4" fill="#2b1b54"/>
+        <text x="559" y="290" font-size="10" font-weight="600" fill="#d2a8ff" text-anchor="middle">sonnet default</text>
+        <text x="348" y="310" font-size="11" fill="#c9d1d9">• Evaluates diff vs spec &amp; risk triggers</text>
+        <text x="348" y="326" font-size="11" fill="#c9d1d9">• Returns PASS / FAIL + findings</text>
+        <text x="348" y="342" font-size="10.5" fill="#f85149">⛔ Read-only, never writes fix/code</text>
+      </g>
+
+      <!-- Scribe -->
+      <g id="role-scribe">
+        <rect x="625" y="270" width="275" height="82" rx="6" fill="url(#scribe-grad)" stroke="#1b7c87" stroke-width="1"/>
+        <text x="638" y="290" font-size="13" font-weight="700" fill="#39c5cf">📝 scribe</text>
+        <rect x="815" y="277" width="72" height="18" rx="4" fill="#0b3b43"/>
+        <text x="851" y="290" font-size="10" font-weight="600" fill="#56d4dd" text-anchor="middle">haiku default</text>
+        <text x="638" y="310" font-size="11" fill="#c9d1d9">• Updates docs/agent/*.md logs</text>
+        <text x="638" y="326" font-size="11" fill="#c9d1d9">• Records task outcome &amp; risks</text>
+        <text x="638" y="342" font-size="10.5" fill="#f85149">⛔ Never writes production code</text>
+      </g>
+    </g>
+
+    <!-- Guard & Hooks Card -->
+    <g id="hooks-guard" filter="url(#card-shadow)">
+      <rect x="930" y="130" width="285" height="235" rx="10" fill="url(#guard-grad)" stroke="#da3633" stroke-width="1.5"/>
+      <rect x="930" y="130" width="285" height="38" rx="10" fill="#491619" stroke="#da3633" stroke-width="1"/>
+      <text x="948" y="154" font-size="15" font-weight="700" fill="#ff7b72">🛡️ Guard &amp; Hooks Layer</text>
+
+      <text x="945" y="188" font-size="12" font-weight="700" fill="#f85149">PreToolUse Hook (Guard):</text>
+      <text x="945" y="206" font-size="11" fill="#c9d1d9">• Intercepts Write, Edit, Bash, Agent</text>
+      <text x="945" y="222" font-size="11" fill="#c9d1d9">• Enforces path &amp; role constraints</text>
+      <text x="945" y="238" font-size="11" fill="#c9d1d9">• Prompts 'ask' / 'deny' on violation</text>
+
+      <text x="945" y="266" font-size="12" font-weight="700" fill="#58a6ff">PostToolUse &amp; Observe Hook:</text>
+      <text x="945" y="284" font-size="11" fill="#c9d1d9">• Warns if Boss makes heavy reads</text>
+      <text x="945" y="300" font-size="11" fill="#c9d1d9">• Tracks token delta &amp; role pricing</text>
+
+      <rect x="940" y="318" width="265" height="36" rx="4" fill="#25090b" stroke="#67191d" stroke-width="1"/>
+      <text x="948" y="334" font-size="10.5" font-weight="600" fill="#f85149">⚡ Fail-Open Safety:</text>
+      <text x="948" y="348" font-size="10.5" fill="#8b949e">Malformed input/crash exits silently without blocking</text>
+    </g>
+  </g>
+
+  <!-- ==================== BOTTOM SECTION: TIMING & ROUTING SEQUENCE ==================== -->
+  <g id="sequence-timing">
+    <!-- Section Title -->
+    <text x="30" y="395" font-size="14" font-weight="700" fill="#7d8590" letter-spacing="1">2. ROUTING LIFECYCLE &amp; EXECUTION TIMING SEQUENCE (時序流程)</text>
+
+    <!-- Lane Classification Bar -->
+    <g id="lane-bar">
+      <rect x="25" y="410" width="1190" height="72" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      
+      <!-- Lane 0 -->
+      <rect x="35" y="418" width="370" height="56" rx="6" fill="#1c2128" stroke="#d29922" stroke-width="1"/>
+      <text x="48" y="437" font-size="12" font-weight="700" fill="#f0b72f">Lane 0: Inline (Surgical Edit)</text>
+      <text x="48" y="453" font-size="11" fill="#8b949e">1-line typo / version bump below dispatch floor</text>
+      <text x="48" y="467" font-size="10.5" font-weight="600" fill="#e3b341">➜ Boss edits direct ➜ Boss Verify ➜ Inline record</text>
+
+      <!-- Lane 1 -->
+      <rect x="420" y="418" width="380" height="56" rx="6" fill="#1c2128" stroke="#388bfd" stroke-width="1"/>
+      <text x="433" y="437" font-size="12" font-weight="700" fill="#58a6ff">Lane 1: Bounded (Default Feature/Fix)</text>
+      <text x="433" y="453" font-size="11" fill="#8b949e">Clear scope inside known modules</text>
+      <text x="433" y="467" font-size="10.5" font-weight="600" fill="#79c0ff">➜ (Scout) ➜ Boss Brief ➜ Builder ➜ (Reviewer) ➜ Scribe</text>
+
+      <!-- Lane 2 -->
+      <rect x="815" y="418" width="390" height="56" rx="6" fill="#1c2128" stroke="#bc8cff" stroke-width="1"/>
+      <text x="828" y="437" font-size="12" font-weight="700" fill="#bc8cff">Lane 2: Elevated Risk (Complex/State/Auth)</text>
+      <text x="828" y="453" font-size="11" fill="#8b949e">Unknown bug, DB/state, API boundary, auth change</text>
+      <text x="828" y="467" font-size="10.5" font-weight="600" fill="#d2a8ff">➜ Scout ➜ Spec+Failing Tests ➜ Builder ➜ Reviewer ➜ Scribe</text>
+    </g>
+
+    <!-- Main Sequence Flow Canvas -->
+    <g id="sequence-steps">
+      <rect x="25" y="495" width="1190" height="430" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+
+      <!-- STEP 0 -->
+      <g id="step0" transform="translate(45, 515)">
+        <rect width="145" height="150" rx="8" fill="#1c2128" stroke="#d29922" stroke-width="1.2"/>
+        <rect width="145" height="28" rx="8" fill="#3d2c08"/>
+        <text x="72" y="19" font-size="12" font-weight="700" fill="#f0b72f" text-anchor="middle">Step 0: Classify</text>
+        
+        <text x="12" y="48" font-size="11" font-weight="600" fill="#c9d1d9">Actor: Boss</text>
+        <text x="12" y="68" font-size="10.5" fill="#8b949e">1. Evaluate risk &amp;</text>
+        <text x="12" y="83" font-size="10.5" fill="#8b949e">   inference need</text>
+        <text x="12" y="103" font-size="10.5" fill="#8b949e">2. Floor Check:</text>
+        <text x="12" y="118" font-size="10" fill="#79c0ff">   Job &gt; cold start?</text>
+        <text x="12" y="138" font-size="10.5" font-weight="600" fill="#e3b341">Pick Lane 0/1/2</text>
+      </g>
+
+      <!-- Arrow 0 -> 1 -->
+      <path d="M 195 590 L 225 590" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow-blue)"/>
+      <text x="210" y="580" font-size="10" fill="#58a6ff" text-anchor="middle">Lane 1/2</text>
+
+      <!-- STEP 1 -->
+      <g id="step1" transform="translate(230, 515)">
+        <rect width="145" height="150" rx="8" fill="#1c2128" stroke="#388bfd" stroke-width="1.2"/>
+        <rect width="145" height="28" rx="8" fill="#092540"/>
+        <text x="72" y="19" font-size="12" font-weight="700" fill="#58a6ff" text-anchor="middle">Step 1: Scout</text>
+        
+        <text x="12" y="48" font-size="11" font-weight="600" fill="#c9d1d9">Actor: scout (haiku)</text>
+        <text x="12" y="68" font-size="10.5" fill="#8b949e">• Only if unmapped</text>
+        <text x="12" y="85" font-size="10.5" fill="#8b949e">• Targeted queries</text>
+        <text x="12" y="102" font-size="10.5" fill="#8b949e">• Read-only scan</text>
+        <rect x="8" y="115" width="129" height="26" rx="4" fill="#0c2d6b"/>
+        <text x="72" y="132" font-size="10" font-weight="600" fill="#79c0ff" text-anchor="middle">Returns ~40 lines</text>
+      </g>
+
+      <!-- Arrow 1 -> 2 -->
+      <path d="M 380 590 L 410 590" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+      <!-- STEP 2 -->
+      <g id="step2" transform="translate(415, 515)">
+        <rect width="150" height="150" rx="8" fill="#1c2128" stroke="#d29922" stroke-width="1.2"/>
+        <rect width="150" height="28" rx="8" fill="#3d2c08"/>
+        <text x="75" y="19" font-size="12" font-weight="700" fill="#f0b72f" text-anchor="middle">Step 2: Spec / Brief</text>
+        
+        <text x="12" y="48" font-size="11" font-weight="600" fill="#c9d1d9">Actor: Boss</text>
+        <text x="12" y="66" font-size="10.5" fill="#58a6ff"><tspan font-weight="700">Lane 1:</tspan> Inline Brief</text>
+        <text x="12" y="81" font-size="9.5" fill="#8b949e">Task, Contract, Files,</text>
+        <text x="12" y="94" font-size="9.5" fill="#8b949e">Verify, Non-goals</text>
+        
+        <text x="12" y="114" font-size="10.5" fill="#bc8cff"><tspan font-weight="700">Lane 2:</tspan> Spec File</text>
+        <text x="12" y="129" font-size="9.5" fill="#8b949e">+ Failing Tests</text>
+        <text x="12" y="142" font-size="9.5" fill="#ff7b72">Boss NEVER writes prod</text>
+      </g>
+
+      <!-- Arrow 2 -> 3 -->
+      <path d="M 570 590 L 600 590" stroke="#3fb950" stroke-width="2" marker-end="url(#arrow-green)"/>
+      <text x="585" y="580" font-size="9.5" fill="#3fb950" text-anchor="middle">Dispatch</text>
+
+      <!-- STEP 3 -->
+      <g id="step3" transform="translate(605, 515)">
+        <rect width="150" height="150" rx="8" fill="#1c2128" stroke="#2ea043" stroke-width="1.2"/>
+        <rect width="150" height="28" rx="8" fill="#0a3319"/>
+        <text x="75" y="19" font-size="12" font-weight="700" fill="#3fb950" text-anchor="middle">Step 3: Build</text>
+        
+        <text x="12" y="48" font-size="11" font-weight="600" fill="#c9d1d9">Actor: builder (sonnet)</text>
+        <text x="12" y="68" font-size="10.5" fill="#8b949e">• Reads spec / brief</text>
+        <text x="12" y="85" font-size="10.5" fill="#8b949e">• Implements in Files</text>
+        <text x="12" y="102" font-size="10.5" fill="#8b949e">• Runs Verify &amp; Tests</text>
+        <rect x="8" y="115" width="134" height="26" rx="4" fill="#0e4429"/>
+        <text x="75" y="132" font-size="10" font-weight="600" fill="#7ee787" text-anchor="middle">Reports diff &amp; test log</text>
+      </g>
+
+      <!-- Arrow 3 -> 4 -->
+      <path d="M 760 590 L 790 590" stroke="#bc8cff" stroke-width="2" marker-end="url(#arrow-purple)"/>
+
+      <!-- STEP 4 -->
+      <g id="step4" transform="translate(795, 515)">
+        <rect width="150" height="150" rx="8" fill="#1c2128" stroke="#8957e5" stroke-width="1.2"/>
+        <rect width="150" height="28" rx="8" fill="#261642"/>
+        <text x="75" y="19" font-size="12" font-weight="700" fill="#bc8cff" text-anchor="middle">Step 4: Review</text>
+        
+        <text x="12" y="48" font-size="11" font-weight="600" fill="#c9d1d9">Actor: reviewer (sonnet)</text>
+        <text x="12" y="66" font-size="10" fill="#8b949e">Policy: risk / always</text>
+        <text x="12" y="81" font-size="9.5" fill="#d2a8ff">• 7 Risk Triggers</text>
+        <text x="12" y="95" font-size="9.5" fill="#8b949e">  (no_red_green, auth,</text>
+        <text x="12" y="108" font-size="9.5" fill="#8b949e">   boundary, state...)</text>
+        <rect x="8" y="115" width="134" height="26" rx="4" fill="#2b1b54"/>
+        <text x="75" y="132" font-size="10" font-weight="600" fill="#d2a8ff" text-anchor="middle">PASS / FAIL findings</text>
+      </g>
+
+      <!-- Arrow 4 -> 5 -->
+      <path d="M 950 590 L 980 590" stroke="#d29922" stroke-width="2" marker-end="url(#arrow-orange)"/>
+
+      <!-- STEP 5 & STEP 6 RIGHT PANEL -->
+      <g id="step5" transform="translate(985, 515)">
+        <rect width="210" height="150" rx="8" fill="#1c2128" stroke="#d29922" stroke-width="1.2"/>
+        <rect width="210" height="28" rx="8" fill="#3d2c08"/>
+        <text x="105" y="19" font-size="12" font-weight="700" fill="#f0b72f" text-anchor="middle">Step 5: Adjudicate (Boss)</text>
+        
+        <text x="12" y="48" font-size="11" font-weight="600" fill="#3fb950">✓ PASS ➜ Go to Step 6</text>
+        <text x="12" y="68" font-size="11" font-weight="600" fill="#e3b341">⚠ PASS with RISK ➜ Record</text>
+        <text x="12" y="88" font-size="11" font-weight="600" fill="#f0883e">✗ FAIL (1st) ➜ Fix Instruction</text>
+        <text x="12" y="108" font-size="11" font-weight="600" fill="#f85149">✗ FAIL (2nd) ➜ Spec Bug! Redo</text>
+        <text x="12" y="128" font-size="11" font-weight="600" fill="#ff7b72">🛑 FAIL (3rd) ➜ Escalate User</text>
+      </g>
+
+      <!-- ==================== ADJUDICATION FEEDBACK LOOPS ==================== -->
+      <!-- Loop 1: FAIL 1st (Boss writes fix instruction -> builder) -->
+      <path d="M 1030 670 L 1030 710 L 680 710 L 680 670" fill="none" stroke="#f0883e" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow-orange)"/>
+      <rect x="760" y="698" width="190" height="22" rx="4" fill="#2d1500" stroke="#f0883e" stroke-width="1"/>
+      <text x="855" y="713" font-size="10" font-weight="600" fill="#ffa657" text-anchor="middle">FAIL 1st: Re-dispatch Builder with Fix</text>
+
+      <!-- Loop 2: FAIL 2nd (Boss re-writes spec -> restart from Step 2) -->
+      <path d="M 1090 670 L 1090 745 L 490 745 L 490 670" fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow-red)"/>
+      <rect x="650" y="734" width="220" height="22" rx="4" fill="#380d0d" stroke="#f85149" stroke-width="1"/>
+      <text x="760" y="749" font-size="10" font-weight="600" fill="#ff7b72" text-anchor="middle">FAIL 2nd: Spec defect (~80%) ➜ Re-spec &amp; Re-build</text>
+
+      <!-- STEP 6: RECORD (BOTTOM ROW) -->
+      <g id="step6" transform="translate(350, 785)">
+        <rect width="520" height="120" rx="8" fill="#1c2128" stroke="#1b7c87" stroke-width="1.5"/>
+        <rect width="520" height="28" rx="8" fill="#082b30"/>
+        <text x="260" y="19" font-size="13" font-weight="700" fill="#39c5cf" text-anchor="middle">Step 6: Record Bookkeeping (scribe - haiku)</text>
+
+        <text x="20" y="52" font-size="11.5" font-weight="600" fill="#c9d1d9">Outcome payload dispatched to scribe:</text>
+        <text x="20" y="72" font-size="11" fill="#8b949e">• Task ID &amp; Files Changed   • Tests &amp; Lint Output   • Reviewer Verdict &amp; Risks</text>
+        <text x="20" y="90" font-size="11" fill="#8b949e">• Appends outcome to <tspan fill="#56d4dd">docs/agent/PROGRESS.md</tspan>, <tspan fill="#56d4dd">TASK.md</tspan>, <tspan fill="#56d4dd">BUG_FIX.md</tspan></text>
+        <text x="20" y="106" font-size="10.5" fill="#f85149">⛔ Boss never edits tracking records directly in Lane 1/2 (Protected by Hook)</text>
+      </g>
+
+      <!-- Arrow Step 5 (PASS) -> Step 6 -->
+      <path d="M 1120 670 L 1120 845 L 875 845" fill="none" stroke="#39c5cf" stroke-width="2.5" marker-end="url(#arrow-teal)"/>
+      <rect x="940" y="830" width="130" height="22" rx="4" fill="#0b3b43" stroke="#39c5cf" stroke-width="1"/>
+      <text x="1005" y="845" font-size="10.5" font-weight="700" fill="#56d4dd" text-anchor="middle">PASS ➜ Dispatch Scribe</text>
+
+      <!-- Lane 0 direct line to Step 6 inline -->
+      <path d="M 115 670 L 115 845 L 345 845" fill="none" stroke="#e3b341" stroke-width="1.8" stroke-dasharray="4,4" marker-end="url(#arrow-orange)"/>
+      <rect x="135" y="830" width="180" height="22" rx="4" fill="#2d2206" stroke="#e3b341" stroke-width="1"/>
+      <text x="225" y="845" font-size="10" font-weight="600" fill="#f0b72f" text-anchor="middle">Lane 0: Boss direct 1-line log</text>
+    </g>
+  </g>
+
+  <!-- ==================== FOOTER: VERIFICATION / AUDIT BAR ==================== -->
+  <g id="footer" transform="translate(25, 940)">
+    <rect width="1190" height="60" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    
+    <text x="25" y="27" font-size="12" font-weight="700" fill="#f0f6fc">Observability &amp; Cost Verification Commands:</text>
+    <text x="25" y="47" font-size="11.5" fill="#8b949e">Run after tasks to verify model-routing effectiveness from Claude Code transcripts.</text>
+
+    <!-- Command 1 -->
+    <rect x="520" y="14" width="310" height="32" rx="5" fill="#21262d" stroke="#388bfd" stroke-width="1"/>
+    <text x="535" y="34" font-size="12" font-weight="700" fill="#58a6ff">/route:audit</text>
+    <text x="630" y="34" font-size="11" fill="#c9d1d9">Cost per model &amp; per role split</text>
+
+    <!-- Command 2 -->
+    <rect x="850" y="14" width="320" height="32" rx="5" fill="#21262d" stroke="#2ea043" stroke-width="1"/>
+    <text x="865" y="34" font-size="12" font-weight="700" fill="#3fb950">/route:delta</text>
+    <text x="960" y="34" font-size="11" fill="#c9d1d9">Net token savings from main context</text>
+  </g>
+</svg>
