@@ -59,9 +59,10 @@ READ_REASON_NO_SCOUT = (
 )
 
 ARCHIVE_REASON = (
-    "`scribe` must not read {name} — an archive is larger than this role's context and "
-    "there is never a need. Prepend with `Edit` anchored on the file's header line, "
-    "append with a Bash heredoc, locate with `grep -n`, inspect with `sed -n '<range>p'`."
+    "`scribe` must not read {name} whole — an archive is larger than this role's context. "
+    "Re-issue the Read with a `limit` to see the header, then prepend with `Edit` anchored "
+    "on it; append with a Bash heredoc, locate with `grep -n`, inspect with "
+    "`sed -n '<range>p'`."
 )
 
 TS_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}\b")
@@ -284,7 +285,13 @@ def handle_dispatch(role, tool_input, cfg) -> None:
 def handle_read(role, tool_input, project, cfg) -> None:
     target = tool_input.get("file_path")
     rel = rel_path(target, project)
-    if role == "scribe" and rel and rel in archive_paths(cfg):
+    # A bounded archive read is allowed. `Edit` refuses to touch a file that has not been
+    # read, so denying every read left the prepend this message recommends mechanically
+    # impossible and the Bash heredoc append as the only route — and `>>` appends, while a
+    # newest-first archive needs a prepend. Reading a header to anchor an Edit is the
+    # bounded retrieval this guard exists to encourage; only the whole-file read is refused.
+    if (role == "scribe" and rel and rel in archive_paths(cfg)
+            and not tool_input.get("limit")):
         respond("deny", "[routing/scribe] " + ARCHIVE_REASON.format(name=rel))
     # A subagent reading widely is the system working as designed, and a bounded read
     # is the retrieval pattern this guard exists to encourage.

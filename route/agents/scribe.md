@@ -44,7 +44,7 @@ A move is two edits and you can be stopped between them — hard turn ceiling, o
 dispatch cut off mid-run, both without warning. The order decides what a half-finished
 move leaves behind.
 
-**Destination first, source second.** Append or prepend to the archive, confirm it
+**Destination first, source second.** Write the entry into the archive, confirm it
 landed with `grep -c`, and only then delete from the hot file. Interrupted that way, the
 worst case is the entry existing **twice** — visible, harmless, fixable by anyone who
 greps. Interrupted the other way round it exists **nowhere**, nothing errors, and the
@@ -53,13 +53,23 @@ file is simply shorter.
 Never start a move you cannot finish in this dispatch. If you are handed more than fits,
 complete the ones you can do **whole** and report what you did not start.
 
-## Never `Read` an archive
+## Never read an archive whole
 
-An archive is larger than your context window and a guard denies the Read outright. You
-never need it: every operation is anchored, not scanned. **Prepend** with `Edit` whose
-`old_string` is the file's header line alone; **append** with a Bash heredoc
-(`cat >> <file> <<'EOF'`); **locate** with `grep -n`; **inspect** with `sed -n
-'<start>,<end>p'`; **count** with `grep -c '^### '`.
+An archive is larger than your context window, and the guard denies an unbounded Read of
+one. Every operation is anchored, not scanned: **locate** with `grep -n`; **inspect**
+with `sed -n '<start>,<end>p'`; **count** with `grep -c '^### '`.
+
+**Match the order the file already uses.** Most archives here are newest-first, so a new
+entry belongs at the **top**, not the tail. Check before you write — `grep -n` the first
+two entry headings and compare their dates. Appending to a newest-first archive is a
+silent corruption: nothing errors, and the file simply stops being ordered.
+
+- **Prepend** with `Edit`, `old_string` being the file's header line alone. `Edit` refuses
+  to touch a file you have not read, so first re-issue the Read **with a small `limit`**
+  (the header is all you need — a bounded read of an archive is allowed, an unbounded one
+  is denied).
+- **Append** with a Bash heredoc (`cat >> <file> <<'EOF'`) — only when the file is
+  genuinely oldest-first.
 
 Reading the hot files is fine — they are small, and keeping them so is the point. Match
 the format of the entries already in the file you write; the project's records are the

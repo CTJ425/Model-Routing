@@ -119,6 +119,38 @@ def test_scribe_may_not_read_the_archive(project):
     assert decision(read("route:scribe", "docs/agent/TASK_ARCHIVE.md", project)) == "deny"
 
 
+# --- the archive denial used to advertise a path scribe could not take ---
+#
+# ARCHIVE_REASON tells scribe to "prepend with `Edit` anchored on the file's header line".
+# The Edit tool refuses to touch a file that has not been read ("File has not been read
+# yet"), and this guard denied every archive read, so prepending was mechanically
+# impossible and the Bash heredoc append was the only route left. `>>` appends, while a
+# newest-first archive needs a prepend — so the guard forced the wrong write. Observed
+# 2026-08-18: a scribe dispatch appended a PROGRESS_ARCHIVE.md entry to the tail of the
+# file while the same entry was prepended at the head, shipping it twice.
+#
+# A bounded read is the retrieval pattern this guard exists to encourage, and reading a
+# header is what anchoring an Edit requires. Bounded reads of an archive are allowed;
+# unbounded ones stay denied.
+
+def test_scribe_may_read_the_archive_head_with_a_limit(project):
+    assert decision(read("route:scribe", "docs/agent/TASK_ARCHIVE.md", project, limit=40)) is None
+
+
+def test_scribe_bounded_archive_read_allows_every_archive(project):
+    for name in ("TASK_ARCHIVE.md", "FIXED_BUG.md", "PROGRESS_ARCHIVE.md"):
+        assert decision(read("route:scribe", "docs/agent/%s" % name, project, limit=5)) is None, name
+
+
+def test_scribe_archive_read_with_offset_but_no_limit_is_still_denied(project):
+    assert decision(read("route:scribe", "docs/agent/TASK_ARCHIVE.md", project, offset=200)) == "deny"
+
+
+def test_archive_denial_points_at_the_bounded_read(project):
+    text = reason(read("route:scribe", "docs/agent/TASK_ARCHIVE.md", project))
+    assert "limit" in text, text
+
+
 def test_main_large_unbounded_read_asks(project):
     big = project / "big.md"
     big.write_text("x" * 40 * 1024)
