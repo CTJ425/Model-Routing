@@ -111,9 +111,13 @@ full shape.
 ## Verifying it actually routed
 
 ```
+/route:doctor    # is the plugin live, and is it configured so the roles can work
 /route:audit     # cost per model and per role, main thread and subagents
 /route:delta     # whether each dispatch removed net tokens from main's context
 ```
+
+`/route:doctor` runs first when something looks wrong. It answers the one question the other
+two cannot: whether the hooks are executing at all. It reports only — it repairs nothing.
 
 Both read the transcripts Claude Code already writes. Read the per-role split, not the
 token columns: one model and zero subagent transcripts means nothing was routed, whatever
@@ -147,8 +151,9 @@ That has one consequence worth knowing. The hooks are invoked as `python3`. If `
 does not resolve on the PATH Claude Code hands to hooks — a Windows box, or a pyenv/conda
 interpreter that is not on it — every hook fails open and the plugin enforces nothing,
 silently. **The `[routing]` brief at session start is the canary:** if you do not see it,
-the hooks are not running, and neither are the guards. Fix the interpreter before trusting
-any of the boundaries described above.
+the hooks are not running, and neither are the guards. `/route:doctor` checks this directly —
+a `FAIL` on `interpreter` or `hooks` means nothing described above is being enforced. Fix the
+interpreter before trusting any of these boundaries.
 
 ## Language
 
