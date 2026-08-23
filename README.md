@@ -123,11 +123,14 @@ placeholder rates — check them against the official pricing page before quotin
 ## What this does NOT enforce
 
 - **Writes issued through Bash.** The guard's shell-command detection is a regex
-  heuristic, deliberately over-inclusive, and it will never be complete. The real
-  enforcement is the `tools:` allowlist: `scout` and `reviewer` have no Bash at all.
-  For `builder` a suspected write raises an `ask`, because a shell command's target cannot
-  be resolved reliably. Scribe's exact `cat >> <literal-path>` append inside `paths.docs`
-  is allowed; other suspected writes ask.
+  heuristic and it will never be complete. The real enforcement is the `tools:` allowlist:
+  `scout` and `reviewer` have no Bash at all. For `builder` a suspected write raises an
+  `ask`, because a shell command's target cannot be resolved reliably. Scribe's exact
+  `cat >> <literal-path>` append inside `paths.docs` is allowed; other suspected writes ask.
+  Balanced quoted spans are removed before the command is scanned, so `grep 'a -> b'` and
+  `awk '$3 > 10'` are not mistaken for redirects — the cost of that is the mirror case: a
+  write hidden entirely inside a quoted string, such as `bash -c 'echo x > f'`, is not
+  detected. This guard catches accidents; it is not a sandbox.
 - **Anything outside the project directory.** Paths that resolve outside the repo root
   are not classified and not policed.
 - **Agents the plugin does not own.** An unrecognised `agent_type` passes every rule
@@ -139,6 +142,13 @@ placeholder rates — check them against the official pricing page before quotin
 
 Every guard is also fail-open by design: a malformed payload, an unreadable config, or a
 crash in the hook exits silently rather than blocking your session.
+
+That has one consequence worth knowing. The hooks are invoked as `python3`. If `python3`
+does not resolve on the PATH Claude Code hands to hooks — a Windows box, or a pyenv/conda
+interpreter that is not on it — every hook fails open and the plugin enforces nothing,
+silently. **The `[routing]` brief at session start is the canary:** if you do not see it,
+the hooks are not running, and neither are the guards. Fix the interpreter before trusting
+any of the boundaries described above.
 
 ## Language
 

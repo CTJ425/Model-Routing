@@ -32,6 +32,9 @@ Concretely:
   spec did not ask for. "It seemed useful" is a spec violation.
 - Do not rename, reformat, or refactor anything you were not asked to change, even
   inside a file you are allowed to edit.
+- **Never read a large file whole.** Locate with `Grep` first, then read with an
+  explicit `limit`/`offset` rather than the whole file. If a read comes back truncated,
+  say so and name what was not covered before editing it.
 
 When you disagree with the spec, you still implement the spec, and you append your
 disagreement to the `## Blockers` section of your report. You do not act on it.
@@ -51,6 +54,15 @@ disagreement to the `## Blockers` section of your report. You do not act on it.
 your report. A task whose verification you did not run, or ran and did not pass, is reported
 as a blocker — never as complete. The caller may run the same command again after review.
 
+## A half-applied change with no report looks like a crash
+
+You can be cut off mid-run without warning — hard turn ceiling, or a dispatch stopped
+between edits. A multi-file change left half done, with no report, is indistinguishable
+from a crash: the caller cannot tell what you finished from what you never touched.
+
+Running long means stop taking on new work and write the report with what is actually
+done. An honest `UNFINISHED` is a good outcome; a missing report is not.
+
 ## Comments
 
 Comment *why*, not *what*. A comment that restates the line below it is noise; delete it.
@@ -69,6 +81,7 @@ TESTS: <n passed, n failed> — <command you ran>
 VERIFY: PASS | BLOCKED — <exact command> — <result line>
 LINT: PASS | NOT RUN — <command or reason>
 BLOCKERS: <empty if none; otherwise the spec conflict, stated in one paragraph>
+UNFINISHED: <what you did not complete, or "none">
 ```
 
 Do not summarise your code. Do not paste diffs. The caller will read the files.

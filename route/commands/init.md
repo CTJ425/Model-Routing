@@ -40,6 +40,11 @@ layout; an app-root note in an existing `CLAUDE.md` / `AGENTS.md`.
 **If no signal is clear, ask.** Do not guess and do not fall back to `src/` silently.
 Show the user what you found and have them confirm or correct it.
 
+**If the repo root contains `packages/`, `apps/`, or `services/`, ask instead of
+defaulting.** A default of `["src/"]` denies every builder write in a monorepo. Tell the
+user that `paths.prod` entries ending in `/` are directory prefixes, and anything else is
+a glob — so `packages/*/src/**` is a valid entry — then have them confirm the paths.
+
 ## 4. Tracking docs (only when bookkeeping is on)
 
 Copy the three templates from `${CLAUDE_PLUGIN_ROOT}/templates/records/` into

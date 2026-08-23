@@ -49,6 +49,18 @@ def routing_dir(payload) -> str:
     return d
 
 
+def dispatch_max_bytes() -> int:
+    raw = os.environ.get("ROUTING_DISPATCH_MAX_BYTES")
+    if raw:
+        try:
+            n = int(raw)
+            if n > 0:
+                return n
+        except (TypeError, ValueError):
+            pass
+    return DISPATCH_MAX_BYTES
+
+
 def log_dispatch(payload, d: str) -> None:
     effort = payload.get("effort")
     effort_level = effort.get("level") if isinstance(effort, dict) else effort
@@ -65,8 +77,13 @@ def log_dispatch(payload, d: str) -> None:
     }
     path = os.path.join(d, "dispatch.jsonl")
     try:
-        if os.path.getsize(path) > DISPATCH_MAX_BYTES:
-            os.replace(path, path + ".1")
+        if os.path.getsize(path) > dispatch_max_bytes():
+            try:
+                archive_size = os.path.getsize(path + ".1")
+            except OSError:
+                archive_size = 0
+            if os.path.getsize(path) > archive_size:
+                os.replace(path, path + ".1")
     except OSError:
         pass
     with open(path, "a", encoding="utf-8") as fh:

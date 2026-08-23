@@ -186,3 +186,32 @@ def test_subagent_events_are_logged_with_transcript_paths(project):
     assert rows[0]["agent_transcript_path"] == "/tmp/agent-a1.jsonl"
     assert rows[0]["transcript_path"] == "/tmp/main.jsonl"
     assert rows[0]["effort"] == "low"
+
+
+# --- dispatch.jsonl rotation must never destroy a larger archive ---
+
+def test_rotation_never_replaces_a_larger_archive_with_a_smaller_file(project):
+    """Two processes can both observe an over-threshold file. The second one sees a live
+    file that the first already rotated and truncated; rotating again would overwrite a
+    full archive with a few bytes. Size is the ordering that makes that impossible."""
+    d = project / ".claude" / "routing"
+    d.mkdir(parents=True, exist_ok=True)
+    archive = d / "dispatch.jsonl.1"
+    archive.write_text("x" * 5000)
+    (d / "dispatch.jsonl").write_text("y" * 200)
+    run_observe({"hook_event_name": "SubagentStop", "session_id": "t1",
+                 "agent_type": "route:builder", "agent_id": "a1"},
+                project, env_extra={"ROUTING_DISPATCH_MAX_BYTES": "100"})
+    assert archive.read_text() == "x" * 5000, "the larger archive was clobbered"
+
+
+def test_rotation_still_happens_when_the_live_file_is_the_bigger_one(project):
+    d = project / ".claude" / "routing"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "dispatch.jsonl.1").write_text("x" * 10)
+    (d / "dispatch.jsonl").write_text("y" * 5000)
+    run_observe({"hook_event_name": "SubagentStop", "session_id": "t1",
+                 "agent_type": "route:builder", "agent_id": "a1"},
+                project, env_extra={"ROUTING_DISPATCH_MAX_BYTES": "100"})
+    assert (d / "dispatch.jsonl.1").read_text() == "y" * 5000
+    assert "route:builder" in (d / "dispatch.jsonl").read_text()

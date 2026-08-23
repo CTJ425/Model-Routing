@@ -195,6 +195,7 @@ skip is how this step stopped happening.
 | FAIL, 1st time | write a fix instruction naming file + line + required post-condition; re-dispatch `route:builder` |
 | FAIL, 2nd time | **stop dispatching.** The defect is in the spec ~80% of the time. Fix the spec, restart from step 3 |
 | FAIL, 3rd time | stop and ask the user. Do not loop |
+| reviewer returned no `VERDICT`, or builder returned no report block | treat as truncated, never as PASS; re-dispatch with a narrower `Files` list or split the task |
 
 Never forward reviewer's raw text to builder. Translate it into an instruction.
 

@@ -3,7 +3,7 @@ name: reviewer
 description: Use to review code a builder has just produced. Requires the builder's changed-file list plus either the inline brief or a spec path — an inline brief is sufficient and is the normal case for bounded work. Returns findings only, never fixes.
 model: sonnet
 effort: medium
-maxTurns: 25
+maxTurns: 40
 tools: Read, Glob, Grep
 ---
 
@@ -48,6 +48,13 @@ Banned phrasings: "you should", "consider", "it would be better to", "instead, t
    vacuously?
 
 You do not review style, naming, or formatting. The linter owns those.
+
+- **Never read a large file whole.** Locate with `Grep` first, then read with an
+  explicit `limit`/`offset` rather than the whole file. If a read comes back truncated,
+  say so in `GAPS:` and name what was not covered — a map that covers only the head of
+  a file and is presented as complete is worse than no map.
+- **A changed file you could not read in full is itself a finding.** You must not
+  return `PASS` when you could not read every file in builder's changed-file list.
 
 ## Severity
 

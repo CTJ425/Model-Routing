@@ -399,3 +399,57 @@ HEREDOC_TAB = "cat >> docs/agent/archive/2026.md <<-'EOF'\n\tbody\n\tEOF"
 ])
 def test_scribe_heredoc_append(command, want, project):
     assert decision(bash("route:scribe", command, project)) == want
+
+
+# --- quoted '>' is not a redirect: the write heuristic must not fire on read-only
+# --- commands that merely contain an angle bracket inside a quoted argument.
+
+@pytest.mark.parametrize("command", [
+    "grep -n 'foo -> bar' src/a.ts",
+    'grep -n "foo -> bar" src/a.ts',
+    "awk '{ if ($3 > 10) print }' bench.txt",
+    "jq 'select(.count > 0)' out.json",
+    "pytest -k 'a > b'",
+    "grep -rn '=>' src/",
+])
+def test_quoted_angle_bracket_is_not_a_write(command, project):
+    """A '>' inside a balanced quoted span is an argument, not a redirect."""
+    assert decision(bash("route:builder", command, project)) is None
+
+
+@pytest.mark.parametrize("command,want", [
+    ("echo done > result.txt", "ask"),          # a real redirect, unquoted
+    ("cat > src/a.ts", "ask"),
+    ("sed -i 's/a/b/' src/a.ts", "ask"),        # -i is outside the quoted span
+    ("rm -rf build", "ask"),                    # verb match, no redirect involved
+    ("echo 'a > b' > out.txt", "ask"),          # quoted decoy plus a real redirect
+])
+def test_real_writes_survive_quote_stripping(command, want, project):
+    assert decision(bash("route:builder", command, project)) == want
+
+
+def test_quote_stripping_does_not_weaken_read_only_roles(project):
+    assert decision(bash("route:scout", "echo x > src/a.ts", project)) == "deny"
+    assert decision(bash("route:scout", "grep -n 'a -> b' src/a.ts", project)) is None
+
+
+def test_unterminated_quote_is_not_treated_as_a_quoted_span(project):
+    """Fail closed: an unbalanced quote must not swallow a real redirect."""
+    assert decision(bash("route:builder", "echo it's fine > out.txt", project)) == "ask"
+
+
+def test_scribe_in_scope_redirect_still_resolves_after_quote_stripping(project):
+    """Quote stripping is for detection only; scribe's target resolution sees the raw text."""
+    assert decision(bash("route:scribe", "cat >> docs/agent/TASK.md", project)) is None
+    assert decision(bash("route:scribe", 'cat >> "$OUT"', project)) == "ask"
+
+
+@pytest.mark.parametrize("command", [
+    r"echo \'a > out.txt\'",       # \' is a literal quote; the '>' between them is live
+    r"echo \"a > b\"",
+    r"cat \"x\" > src/a.ts",
+])
+def test_escaped_quote_does_not_hide_a_redirect(command, project):
+    """A backslash-escaped quote is not a span delimiter. Treating it as one blanks a real
+    redirect out of the scanned text, which is the one direction this must never fail in."""
+    assert decision(bash("route:builder", command, project)) == "ask"

@@ -21,6 +21,7 @@ def _run(script: str, payload: dict, project, env_extra=None):
     env.pop("ROUTING_READ_KB", None)
     env.pop("ROUTING_OBSERVE", None)
     env.pop("ROUTING_SCOUT_AT", None)
+    env.pop("ROUTING_DISPATCH_MAX_BYTES", None)
     env["CLAUDE_PROJECT_DIR"] = str(project)
     env.update(env_extra or {})
     proc = subprocess.run(

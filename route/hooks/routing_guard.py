@@ -103,6 +103,18 @@ BASH_VCS_MUTATION_RE = re.compile(
     r"cherry-pick|rebase|mv|rm)\b"
 )
 
+# Matches a balanced single- or double-quoted span so it can be blanked out before the
+# write-detection regexes run. An unterminated quote has no mate and is left alone by
+# construction -- there is nothing here for it to match.
+_QUOTED_SPAN_RE = re.compile(r"(?<!\\)'[^']*'|(?<!\\)\"[^\"]*\"")
+
+
+def _strip_quoted_spans(command: str) -> str:
+    """Blank every balanced quoted span, for write-detection only. Target-resolution
+    paths (`_scribe_redirect_in_scope` and friends) must keep seeing the raw command.
+    """
+    return _QUOTED_SPAN_RE.sub(" ", command)
+
 # The exact command shape scribe.md prescribes and nothing else: `cat >>`, one
 # one literal path target, an optional heredoc. A heredoc is a whole multi-line command
 # -- opener, body, terminator -- not something a single-line regex can capture, so the
@@ -338,10 +350,11 @@ def handle_bash(role, tool_input, project, cfg) -> None:
     if role not in RULES or role == "main":
         sys.exit(0)
     command = tool_input.get("command") or ""
-    if role == "scribe" and BASH_VCS_MUTATION_RE.search(command):
+    scan_command = _strip_quoted_spans(command)
+    if role == "scribe" and BASH_VCS_MUTATION_RE.search(scan_command):
         respond("deny", "[routing/scribe] Scribe records outcomes but does not mutate "
                 "version-control state.")
-    if not BASH_WRITE_RE.search(command):
+    if not BASH_WRITE_RE.search(scan_command):
         sys.exit(0)
     if role in READ_ONLY_ROLES:
         respond("deny", "[routing/%s] " % role + BASH_REASON.format(

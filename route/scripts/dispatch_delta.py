@@ -211,6 +211,8 @@ def main() -> int:
     ap.add_argument("--detail", action="store_true", help="one line per dispatch")
     ap.add_argument("--validate", action="store_true",
                     help="compare the chars/N estimate against measured cache_read growth")
+    ap.add_argument("--all", action="store_true", help="every session for this project")
+    ap.add_argument("--sessions", type=int, default=1, help="how many recent sessions")
     args = ap.parse_args()
 
     d = os.path.join(os.path.expanduser("~"), ".claude", "projects",
@@ -220,7 +222,7 @@ def main() -> int:
         print(f"No transcripts under {d}", file=sys.stderr)
         return 1
 
-    recs = [r for p in paths for r in collect(p)]
+    recs = [r for p in (paths if args.all else paths[: args.sessions]) for r in collect(p)]
     if not recs:
         print("No dispatches with a matching subagent transcript were found.", file=sys.stderr)
         return 1
