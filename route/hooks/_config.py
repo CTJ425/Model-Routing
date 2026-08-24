@@ -20,6 +20,9 @@ import re
 
 MAIN_ALIASES = {"", "main", "default", "root", "none"}
 
+# The roles this plugin owns. Any other agent in the repo is not ours to police.
+ROUTE_ROLES = ("scout", "builder", "reviewer", "scribe")
+
 # Stable names let the skill, the review nudge, and project configuration refer to
 # the same policy without copying prose into three different files.
 DEFAULT_REVIEW_TRIGGERS = (
@@ -70,6 +73,7 @@ DEFAULTS = {
         "bashWriteDetection": True,
     },
     "scout": {"enabled": True},
+    "roles": {r: {"enabled": True} for r in ROUTE_ROLES},
     "review": {"policy": "risk", "nudge": True},
     "audit": {"charsPerToken": 4.0},
 }
@@ -99,6 +103,29 @@ def _merge(base: dict, over: dict) -> dict:
     return out
 
 
+def _fold_legacy_scout(user: dict) -> dict:
+    """`scout.enabled` predates `roles.scout.enabled`. Fold it in before the merge.
+
+    After the merge every role carries an explicit `enabled`, so a v1 file's
+    `scout.enabled: false` would be overwritten by the default and read as true.
+    An explicit `roles.scout.enabled` wins: it is the current key.
+    """
+    legacy = (user.get("scout") or {}) if isinstance(user.get("scout"), dict) else {}
+    if "enabled" not in legacy:
+        return user
+    roles = user.get("roles")
+    roles = dict(roles) if isinstance(roles, dict) else {}
+    entry = roles.get("scout")
+    entry = dict(entry) if isinstance(entry, dict) else {}
+    if "enabled" in entry:
+        return user
+    entry["enabled"] = legacy["enabled"]
+    roles["scout"] = entry
+    user = dict(user)
+    user["roles"] = roles
+    return user
+
+
 def load_config(project: str) -> dict:
     path = os.path.join(project, ".claude", "route.config.json")
     try:
@@ -108,7 +135,19 @@ def load_config(project: str) -> dict:
         user = {}
     if not isinstance(user, dict):
         user = {}
-    return _merge(DEFAULTS, user)
+    return _merge(DEFAULTS, _fold_legacy_scout(user))
+
+
+def role_enabled(cfg: dict, role) -> bool:
+    """-> whether `role` may be dispatched. A role this plugin does not own is never
+    blocked here."""
+    name = normalize_role(role)
+    if name not in ROUTE_ROLES:
+        return True
+    entry = (cfg.get("roles") or {}).get(name)
+    if not isinstance(entry, dict):
+        return True
+    return bool(entry.get("enabled", True))
 
 
 def rel_path(target: str, project: str):

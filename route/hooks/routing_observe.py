@@ -38,7 +38,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import (  # noqa: E402
-    DEFAULT_REVIEW_TRIGGERS, load_config, normalize_role, project_dir,
+    DEFAULT_REVIEW_TRIGGERS, ROUTE_ROLES, load_config, normalize_role, project_dir,
+    role_enabled,
 )
 
 REPEAT_EVERY = 8
@@ -99,14 +100,37 @@ BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or 
 - **Cost here is context replay, not output.** Replaying context into the main
   session's window is billed on every remaining turn of the session, so bulk content
   goes to a subagent even when the task looks trivial.
-- **Roster.** This session plans, writes specs, and adjudicates.{scout_clause} `builder`
-  implements; `reviewer` checks risk work{scribe_clause}.
-  Delegation is pre-authorized — dispatch without asking. Dispatch by scoped name
-  (`route:scout`, `route:builder`, ...). Per-role model tiers live in
-  `.claude/route.config.json` (see `/route:config`).
+- **Roster.** This session plans, writes specs, and adjudicates.{roster_clause}
+  Per-role model tiers live in `.claude/route.config.json` (see `/route:config`).
 - **Guards will ask** before this session edits production code{record_clause},
   dispatches `Explore`/`general-purpose`, or issues an unbounded Read over {read_kb}KB.
   An `ask` is policy, not an obstacle: take the cheaper path it names."""
+
+ROSTER_CLAUSE = {
+    "scout": "`scout` reads and compresses",
+    "builder": "`builder` implements",
+    "reviewer": "`reviewer` checks risk work",
+    "scribe": "`scribe` records",
+}
+
+
+def roster_clause(cfg, bookkeeping: bool) -> str:
+    """The roster names only roles that may actually be dispatched.
+
+    Naming a role that `roles.<role>.enabled` turns off would send the session into a
+    guard denial, which is a worse way to learn the roster than reading it.
+    """
+    live = [r for r in ROUTE_ROLES
+            if role_enabled(cfg, r) and (r != "scribe" or bookkeeping)]
+    if not live:
+        return (" No route role is available for dispatch, so this session does the "
+                "work itself.")
+    return (
+        " %s.\n  Delegation is pre-authorized — dispatch without asking. Dispatch by "
+        "scoped name (%s)." % ("; ".join(ROSTER_CLAUSE[r] for r in live),
+                               ", ".join("`route:%s`" % r for r in live))
+    )
+
 
 REVIEW_TRIGGER_TEXT = {
     "no_red_green": "the change lacks a test that failed before and passes now",
@@ -199,12 +223,10 @@ def emit_brief(payload) -> None:
     project = project_dir(payload)
     cfg = load_config(project)
     bookkeeping = bool((cfg.get("bookkeeping") or {}).get("enabled"))
-    scout_enabled = (cfg.get("scout") or {}).get("enabled", True)
 
     text = BRIEF_HEAD.format(
         read_kb=cfg["guard"].get("readKB", 32),
-        scout_clause=" `scout` reads and compresses;" if scout_enabled else "",
-        scribe_clause="; `scribe` records" if bookkeeping else "",
+        roster_clause=roster_clause(cfg, bookkeeping),
         record_clause=" or a tracking record" if bookkeeping else "",
     )
     if bookkeeping:
@@ -238,7 +260,7 @@ def count_discovery(payload, d: str) -> int:
 def handle_discovery(payload, d: str) -> None:
     n = count_discovery(payload, d)
     cfg = load_config(project_dir(payload))
-    if not (cfg.get("scout") or {}).get("enabled", True):
+    if not role_enabled(cfg, "scout"):
         return
     try:
         threshold = int(os.environ.get("ROUTING_SCOUT_AT")
@@ -281,6 +303,8 @@ def handle_dispatch_return(payload) -> None:
     review = cfg.get("review") or {}
     if review.get("policy") == "never" or not review.get("nudge", True):
         return
+    if not role_enabled(cfg, "reviewer"):
+        return  # the nudge's only action is to dispatch a role that cannot run
     spawned = normalize_role((payload.get("tool_input") or {}).get("subagent_type"))
     if spawned != "builder":
         return  # reviewer returning is the normal path; silence is correct there

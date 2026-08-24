@@ -1,6 +1,8 @@
 """Tests for routing_observe.py — the brief, the counters, and the review nudge."""
 import json
 
+import pytest
+
 from conftest import BASE_CONFIG, write_config
 from helpers import run_observe
 
@@ -67,6 +69,53 @@ def test_brief_omits_scout_from_roster_when_disabled(project):
 
 def test_brief_includes_scout_in_roster_by_default(project):
     assert "`scout` reads and compresses" in brief(project)
+
+
+# --- roles.<role>.enabled in the roster ---
+
+def with_roles(project, **enabled):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["roles"] = {role: {"enabled": state} for role, state in enabled.items()}
+    write_config(project, cfg)
+
+
+@pytest.mark.parametrize("role,clause", [
+    ("scout", "`scout` reads and compresses"),
+    ("builder", "`builder` implements"),
+    ("reviewer", "`reviewer` checks risk work"),
+    ("scribe", "`scribe` records"),
+])
+def test_brief_omits_a_disabled_role(role, clause, project):
+    with_roles(project, **{role: False})
+    text = brief(project)
+    assert clause not in text
+    assert "`route:%s`" % role not in text
+
+
+@pytest.mark.parametrize("role,clause", [
+    ("scout", "`scout` reads and compresses"),
+    ("builder", "`builder` implements"),
+    ("reviewer", "`reviewer` checks risk work"),
+    ("scribe", "`scribe` records"),
+])
+def test_brief_names_every_role_by_default(role, clause, project):
+    text = brief(project)
+    assert clause in text
+    assert "`route:%s`" % role in text
+
+
+def test_brief_drops_the_delegation_line_when_every_role_is_off(project):
+    with_roles(project, scout=False, builder=False, reviewer=False, scribe=False)
+    text = brief(project)
+    assert "no route role is available" in text.lower()
+    assert "Delegation is pre-authorized" not in text
+
+
+def test_brief_keeps_the_other_roles_when_one_is_off(project):
+    with_roles(project, scout=False)
+    text = brief(project)
+    assert "`builder` implements" in text
+    assert "`reviewer` checks risk work" in text
 
 
 # --- discovery counter ---
@@ -139,6 +188,12 @@ def test_builder_async_launch_says_dispatched_not_returned(project):
     assert "dispatched" in text
     assert "completion notification" in text
     assert "dispatch `route:reviewer` now" not in text
+
+
+def test_no_review_nudge_when_the_reviewer_is_disabled(project):
+    """Its only instruction is to dispatch a role the guard now denies."""
+    with_roles(project, reviewer=False)
+    assert dispatch_return(project, "route:builder") is None
 
 
 def test_reviewer_return_is_silent(project):

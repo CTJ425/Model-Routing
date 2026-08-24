@@ -17,7 +17,10 @@ import sys
 
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks"))
-from _config import DEFAULTS, load_config, matches_any, project_dir, record_paths  # noqa: E402
+from _config import (  # noqa: E402
+    DEFAULTS, ROUTE_ROLES, load_config, matches_any, project_dir, record_paths,
+    role_enabled,
+)
 
 PROJECT = project_dir()
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -166,6 +169,18 @@ def check_models(cfg: dict) -> None:
         models.get("reviewer"), models.get("scribe")))
 
 
+def check_roles(cfg: dict) -> None:
+    off = [r for r in ROUTE_ROLES if not role_enabled(cfg, r)]
+    if not off:
+        check("PASS", "roles", "all four roles may be dispatched.")
+        return
+    # Off is a valid configuration, not a fault: report it so a denied dispatch is
+    # never a surprise.
+    check("WARN", "roles",
+          "%s turned off in roles.*.enabled; the guard denies those dispatches and the "
+          "main session absorbs that work." % ", ".join(off))
+
+
 def check_dispatch_log() -> None:
     path = os.path.join(PROJECT, ".claude", "routing", "dispatch.jsonl")
     if not os.path.isfile(path):
@@ -225,6 +240,7 @@ def main() -> int:
     run_check("paths.prod", check_paths_prod, cfg)
     run_check("paths.docs", check_paths_docs, cfg)
     run_check("models", check_models, cfg)
+    run_check("roles", check_roles, cfg)
     run_check("dispatch log", check_dispatch_log)
     run_check("transcripts", check_transcripts)
     print("%d failed, %d warnings, %d passed"

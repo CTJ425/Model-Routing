@@ -54,7 +54,7 @@ treating the example above as a fixed threshold.
 This is a sizing question, not a risk question. It never overrides Step 4 — a change that
 trips a review trigger gets reviewed however small it is.
 
-## Step 0.5 — model overrides
+## Step 0.5 — model overrides and the live roster
 
 Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
 `.claude/route.config.json`:
@@ -64,11 +64,17 @@ Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
   "version": 2,
   "paths": { "prod": ["src/"] },
   "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
-  "scout": { "enabled": true },
+  "roles": { "scout": { "enabled": true }, "builder": { "enabled": true },
+             "reviewer": { "enabled": true }, "scribe": { "enabled": true } },
   "review": { "policy": "risk" },
   "bookkeeping": { "enabled": true }
 }
 ```
+
+`roles.<role>.enabled` decides whether a role exists for this project at all. A role set
+to `false` is denied by the guard, so do not dispatch it: skip that step and do its work
+in this session, then say in one line which step you absorbed and why. Every role
+defaults to `true`, and `scout.enabled` is a legacy alias that still works.
 
 If `models.<role>` is set for the role you are about to dispatch, pass it explicitly as
 the `model` parameter on the Agent call — this takes precedence over the agent file's own
@@ -87,8 +93,8 @@ prose in reports and records; code, paths, identifiers, and commit messages rema
 
 ## Step 1 — scout (haiku by default)
 
-Skip this step entirely when `scout.enabled` is `false` in `.claude/route.config.json`
-— go straight to the next step with what you already know. Otherwise: only when the
+Skip this step entirely when `roles.scout.enabled` is `false` in
+`.claude/route.config.json` — go straight to the next step with what you already know. Otherwise: only when the
 affected area is not already mapped. Ask a specific question — never "look at the report
 pipeline", always "where is X chosen, who calls it, which tests cover it". You get back
 ~40 lines. This is the single largest token saving in the system.
@@ -131,7 +137,10 @@ file list. The builder and reviewer must therefore report and check that list ex
 
 ## Step 3 — build (sonnet by default)
 
-Dispatch `route:builder` with **only** its Step 2 input: the Lane 1 brief, or the Lane 2 spec
+When `roles.builder.enabled` is `false` the guard denies the dispatch and this session
+writes the code itself, still against the Step 2 input and the same Verify command.
+
+Otherwise dispatch `route:builder` with **only** its Step 2 input: the Lane 1 brief, or the Lane 2 spec
 path plus test path. Never paste a spec file's contents — builder reads the file. Do not
 add advice or context; anything extra you say competes with the spec.
 
@@ -140,6 +149,9 @@ are disjoint and they do not share generated state. Otherwise dispatch them sequ
 parallel builders share a worktree and can overwrite one another.
 
 ## Step 4 — review (sonnet by default)
+
+Skip this step entirely when `roles.reviewer.enabled` is `false` — the guard denies the
+dispatch, so review it yourself here and say so in one line.
 
 Check `review.policy` in `.claude/route.config.json`:
 
@@ -216,7 +228,9 @@ Never forward reviewer's raw text to builder. Translate it into an instruction.
 ## Step 6 — record (haiku by default)
 
 Skip this step entirely when `bookkeeping.enabled` is `false` — that project keeps no
-tracking docs and there is nothing for scribe to write.
+tracking docs and there is nothing for scribe to write. Skip it too when
+`roles.scribe.enabled` is `false`: the project keeps records but does not use scribe, so
+write them here.
 
 Otherwise dispatch `route:scribe` with the outcome: task id (or `?`), files changed,
 Verify result, test counts when applicable, lint result, reviewer verdict, accepted risks,

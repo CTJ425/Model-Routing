@@ -1,6 +1,6 @@
 ---
-description: View or change this project's route settings — per-role model tiers, review policy, guard thresholds.
-argument-hint: "[builder=opus] [review.policy=always] [guard.readKB=64]"
+description: View or change this project's route settings — which roles are on, per-role model tiers, review policy, guard thresholds.
+argument-hint: "[builder=opus] [roles.scribe.enabled=false] [review.policy=always] [guard.readKB=64]"
 ---
 
 Read `.claude/route.config.json` in the project root. If it does not exist, tell the user
@@ -19,8 +19,13 @@ Report it as fact, not as a suggestion to unset it.
 
 ## Showing
 
-Print the current `models` mapping, `review.policy`, bookkeeping enabled/disabled state,
+Print which of the four roles are on (`roles.<role>.enabled`, default true), the current
+`models` mapping, `review.policy`, bookkeeping enabled/disabled state,
 `language.artifacts`, and any non-default `guard` values. Do not dump the whole file.
+
+A role reported as off is denied by the guard, not merely discouraged: dispatching it
+returns a `deny`. Say that when reporting an off role, so the state is not mistaken for a
+suggestion.
 
 ## Changing
 
@@ -30,10 +35,15 @@ Parse `$ARGUMENTS` as `key=value` pairs and update just those keys:
   `models.builder`. Valid roles: `scout`, `builder`, `reviewer`, `scribe`. Any model
   alias or full model id is accepted — this file records the choice, it does not
   validate it against a live model list.
-- A dotted key sets that path directly: `review.policy=always`, `guard.readKB=64`,
-  `guard.mainSeverity=deny`, `bookkeeping.enabled=false`, `scout.enabled=false`,
-  `audit.charsPerToken=1.6`. Coerce `true`/`false` and numeric values to their JSON
-  types, not strings.
+- A dotted key sets that path directly: `roles.scribe.enabled=false`,
+  `review.policy=always`, `guard.readKB=64`, `guard.mainSeverity=deny`,
+  `bookkeeping.enabled=false`, `audit.charsPerToken=1.6`. Coerce `true`/`false` and
+  numeric values to their JSON types, not strings.
+- `roles.<role>.enabled=false` turns a role off for this project. All four roles may be
+  turned off, `builder` included. Write `roles.scout.enabled` rather than the legacy
+  `scout.enabled`; the old key still loads, and the new one wins when both are present.
+  When turning a role off, state in one line what the loop does instead — this session
+  absorbs that step's work.
 - For array values, accept a JSON array literal, for example
   `review.triggers=["boundary","control_flow"]`, and validate each trigger against the
   schema before writing it.
@@ -46,21 +56,23 @@ After showing the current values, drive the choice with `AskUserQuestion` instea
 free-form question:
 
 1. Ask which of the four roles to change, multi-select, one option per role:
-   - `scout` — "reads and compresses; can be turned off"
-   - `builder` — "implements; cannot be turned off, it is the plugin itself" — offer it
-     only for a model-tier change, never an on/off choice
-   - `reviewer` — "checks risk work; off = review.policy=never"
-   - `scribe` — "records outcomes; off = bookkeeping.enabled=false"
+   - `scout` — "reads and compresses"
+   - `builder` — "implements"
+   - `reviewer` — "checks risk work"
+   - `scribe` — "records outcomes"
    Include a fifth option for settings that are not per-role: `guard.*` thresholds and
    `language.artifacts`.
 2. For each role picked in step 1 (except when only the fifth option was picked), ask
    its model tier in one follow-up question per role (or a single call with one question
    per role, up to the 4-question limit).
-3. For each role picked, ask its second dimension:
-   - `scout` → enabled true/false → writes `scout.enabled`
-   - `reviewer` → policy always/risk/never → writes `review.policy`
-   - `scribe` → enabled true/false → writes `bookkeeping.enabled`
-   - `builder` → skip, it has no second dimension
+3. For each role picked, ask whether the role is on or off → writes
+   `roles.<role>.enabled`. Off means the guard denies the dispatch, so name what absorbs
+   the work: for `builder` and `reviewer` that is this session; for `scribe`, this
+   session writes the records unless the user also wants `bookkeeping.enabled=false`;
+   for `scout`, discovery happens in this session under the `guard.readKB` ceiling.
+   For `reviewer`, also ask its policy always/risk/never → writes `review.policy`. That
+   is a separate axis: `never` means review is not required, while
+   `roles.reviewer.enabled=false` means the reviewer cannot run at all.
 4. If the fifth option was picked, ask for the specific `guard.*` key/value or
    `language.artifacts` value.
 

@@ -216,6 +216,76 @@ def test_discovery_dispatch(spawned, want, project):
     assert decision(got) == want
 
 
+# --- roles.<role>.enabled: a role turned off is denied, not merely discouraged ---
+
+def dispatch(spawned, project, caller=""):
+    return run_guard({"tool_name": "Agent", "agent_type": caller,
+                      "tool_input": {"subagent_type": spawned}}, project)
+
+
+def with_roles(project, **enabled):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["roles"] = {role: {"enabled": state} for role, state in enabled.items()}
+    write_config(project, cfg)
+
+
+@pytest.mark.parametrize("role", ["scout", "builder", "reviewer", "scribe"])
+def test_disabled_role_is_denied(role, project):
+    with_roles(project, **{role: False})
+    got = dispatch("route:" + role, project)
+    assert decision(got) == "deny"
+    assert "roles.%s.enabled" % role in reason(got)
+
+
+@pytest.mark.parametrize("role", ["scout", "builder", "reviewer", "scribe"])
+def test_enabled_role_dispatches_silently(role, project):
+    with_roles(project, **{role: True})
+    assert decision(dispatch("route:" + role, project)) is None
+
+
+def test_every_role_is_enabled_by_default(project):
+    for role in ("scout", "builder", "reviewer", "scribe"):
+        assert decision(dispatch("route:" + role, project)) is None
+
+
+def test_disabled_role_is_denied_by_its_bare_name(project):
+    """A dispatch that skips the plugin namespace must not skip the switch."""
+    with_roles(project, builder=False)
+    assert decision(dispatch("builder", project)) == "deny"
+
+
+def test_disabled_role_is_denied_inside_a_subagent(project):
+    with_roles(project, scribe=False)
+    assert decision(dispatch("route:scribe", project, caller="route:builder")) == "deny"
+
+
+def test_disabling_one_role_leaves_the_others_alone(project):
+    with_roles(project, reviewer=False)
+    assert decision(dispatch("route:builder", project)) is None
+    assert decision(dispatch("route:scribe", project)) is None
+
+
+def test_legacy_scout_enabled_still_disables_scout(project):
+    """v1 files carry `scout.enabled`; it must keep working."""
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["scout"] = {"enabled": False}
+    write_config(project, cfg)
+    assert decision(dispatch("route:scout", project)) == "deny"
+
+
+def test_roles_key_outranks_the_legacy_scout_key(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["scout"] = {"enabled": False}
+    cfg["roles"] = {"scout": {"enabled": True}}
+    write_config(project, cfg)
+    assert decision(dispatch("route:scout", project)) is None
+
+
+def test_an_agent_this_plugin_does_not_own_is_not_switched_off(project):
+    with_roles(project, builder=False)
+    assert decision(dispatch("statusline-setup", project)) is None
+
+
 def test_discovery_reason_drops_scout_when_disabled(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
     cfg["scout"] = {"enabled": False}

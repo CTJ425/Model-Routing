@@ -7,9 +7,10 @@ Four jobs, selected by tool_name.
                       Replaying context dominates a routed session's spend: a large
                       file read once is re-billed on every remaining turn. Bounded
                       reads (`limit` set) always pass.
-  Agent|Task        — polices who gets dispatched. The built-in discovery agents
-                      inherit the caller's model, so they do scout's job at the
-                      caller's price.
+  Agent|Task        — polices who gets dispatched. A role turned off in
+                      `roles.<role>.enabled` is denied outright; the built-in
+                      discovery agents inherit the caller's model, so they do
+                      scout's job at the caller's price.
   Write|Edit|...    — polices what a role may write, and rejects a future-dated
                       timestamp in a tracking record.
   Bash              — best-effort detection of writes that route around the file
@@ -39,8 +40,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import (  # noqa: E402
-    archive_paths, load_config, matches_any, normalize_role, project_dir,
-    record_paths, rel_path,
+    ROUTE_ROLES, archive_paths, load_config, matches_any, normalize_role, project_dir,
+    record_paths, rel_path, role_enabled,
 )
 
 READ_ONLY_ROLES = {"scout", "reviewer"}
@@ -72,6 +73,12 @@ TS_REASON = (
     "happened, so a future or malformed stamp is fabricated. Run "
     "`date '+%Y-%m-%d %H:%M:%S'` and write what it returns — never estimate, and never "
     "carry a stamp over from an earlier draft."
+)
+
+DISABLED_ROLE_REASON = (
+    "`{name}` is turned off for this project: `roles.{role}.enabled` is false in "
+    ".claude/route.config.json. Do this work another way, or re-enable the role with "
+    "`/route:config roles.{role}.enabled=true`."
 )
 
 DISCOVERY_AGENTS = {"explore", "general-purpose"}
@@ -287,9 +294,15 @@ def now_in_timezone(name: str):
 
 def handle_dispatch(role, tool_input, cfg) -> None:
     spawned = (tool_input.get("subagent_type") or "").strip()
-    if normalize_role(spawned) in DISCOVERY_AGENTS or spawned.lower() in DISCOVERY_AGENTS:
-        scout_enabled = (cfg.get("scout") or {}).get("enabled", True)
-        template = DISCOVERY_REASON if scout_enabled else DISCOVERY_REASON_NO_SCOUT
+    spawned_role = normalize_role(spawned)
+    # A disabled role is a deny, not an ask: confirming cannot supply what is missing,
+    # and a role nobody may dispatch is the whole point of turning one off.
+    if spawned_role in ROUTE_ROLES and not role_enabled(cfg, spawned_role):
+        respond("deny", "[routing/%s] " % role + DISABLED_ROLE_REASON.format(
+            name=spawned or spawned_role, role=spawned_role))
+    if spawned_role in DISCOVERY_AGENTS or spawned.lower() in DISCOVERY_AGENTS:
+        template = (DISCOVERY_REASON if role_enabled(cfg, "scout")
+                    else DISCOVERY_REASON_NO_SCOUT)
         respond("ask", "[routing/%s] " % role + template.format(name=spawned))
     sys.exit(0)
 
@@ -318,8 +331,8 @@ def handle_read(role, tool_input, project, cfg) -> None:
     except OSError:
         sys.exit(0)
     if size > limit_kb * 1024:
-        scout_enabled = (cfg.get("scout") or {}).get("enabled", True)
-        template = READ_REASON if scout_enabled else READ_REASON_NO_SCOUT
+        template = (READ_REASON if role_enabled(cfg, "scout")
+                    else READ_REASON_NO_SCOUT)
         respond("ask", "[routing/main] " + template.format(
             name=os.path.basename(target), kb=size // 1024))
     sys.exit(0)

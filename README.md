@@ -41,7 +41,7 @@ Then, in any target repo:
 
 ```
 /route:init      # ask a few questions, write .claude/route.config.json
-/route:config    # view or change which model each role uses in this project
+/route:config    # view or change which roles are on and which model each one uses
 ```
 
 ## Architecture & Routing Sequence
@@ -96,6 +96,8 @@ full shape.
   "version": 2,
   "paths": { "prod": ["src/"] },
   "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
+  "roles": { "scout": { "enabled": true }, "builder": { "enabled": true },
+             "reviewer": { "enabled": true }, "scribe": { "enabled": true } },
   "bookkeeping": { "enabled": true, "timezone": "UTC" },
   "review": { "policy": "risk" }
 }
@@ -106,6 +108,10 @@ full shape.
   passed as a per-dispatch model override. Editing this file never touches the plugin's
   own `agents/*.md`, so a plugin update cannot silently undo a project's tuning. Note
   that the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, if set, outranks it.
+- `roles.<role>.enabled` — set `false` to turn a role off for this project. All four can
+  be turned off, `builder` included. The guard then denies that dispatch outright, the
+  session brief drops the role from its roster, and the main session does that step's
+  work itself. `scout.enabled` is the old name for `roles.scout.enabled` and still works.
 - `bookkeeping.enabled` — set `false` for model routing only: no `scribe`, no tracking
   docs, no record rules in the guard.
 - `review.policy` — the Boss's review-routing policy: `always`, `risk` (default), or

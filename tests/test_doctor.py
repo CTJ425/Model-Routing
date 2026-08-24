@@ -37,6 +37,19 @@ def test_hooks_check_executes_the_real_guard(project):
     assert "[PASS] hooks" in run_doctor(project).stdout
 
 
+def test_roles_check_reports_a_healthy_roster(project):
+    assert "[PASS] roles" in run_doctor(project).stdout
+
+
+def test_roles_check_warns_about_a_role_that_is_off(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["roles"] = {"scribe": {"enabled": False}}
+    write_config(project, cfg)
+    out = run_doctor(project).stdout
+    assert "[WARN] roles" in out
+    assert "scribe" in out
+
+
 def test_prod_paths_matching_nothing_is_a_failure(project):
     """The monorepo trap: builder is denied every write and nothing says why."""
     cfg = json.loads(json.dumps(BASE_CONFIG))
