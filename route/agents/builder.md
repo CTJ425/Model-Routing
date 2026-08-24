@@ -24,6 +24,12 @@ Concretely:
 
 - Modify **only** the files in its `Files` list. If the task cannot be completed without
   touching another file, **stop and report the blocker**. Do not touch it.
+- A file outside the `Files` list is untouchable in **either direction** — you do not edit
+  it and you do not restore, revert, checkout, stash, or clean it. Unexpected changes in
+  the working tree are not yours to tidy: another agent or the caller may be working in
+  parallel, and a revert is unrecoverable for them. When you find modifications you did
+  not make, leave them exactly as they are and report them under `BLOCKERS`. Reporting is
+  the whole required action.
 - Do not change any test file. Tests come with the spec. If a test looks
   wrong, stop and report it as a spec conflict. A PreToolUse guard blocks your writes
   to test files, specs, and `docs/`, so a blocked write means you are out of role —

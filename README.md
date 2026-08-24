@@ -63,10 +63,10 @@ The model-routing loop operates across 7 distinct steps with automated role boun
 4. **Step 3 — Implementation & Build (`builder` | Sonnet default)**:
    - Reads spec/brief, implements changes strictly within the specified file list, and runs verification and test commands.
 5. **Step 4 — Review & Trigger Evaluation (`reviewer` | Sonnet default)**:
-   - Triggered based on `review.policy` (`always`, `risk`, `never`). Evaluates diff against 7 risk triggers (`no_red_green`, `persistent_state`, `authorization`, `boundary`, `silent_calculation`, `control_flow`, `builder_blocker`).
+   - Triggered based on `review.policy` (`always`, `risk`, `never`). Boss passes the change as a diff written outside the repo, so the reviewer reads the change rather than reconstructing it from whole files. Evaluates against 7 risk triggers (`no_red_green`, `persistent_state`, `authorization`, `boundary`, `silent_calculation`, `control_flow`, `builder_blocker`).
 6. **Step 5 — Adjudication & Feedback Loops (`Boss` | Session Model)**:
    - **PASS**: Proceeds to Step 6.
-   - **FAIL (1st time)**: Boss writes targeted fix instructions (file + line + post-condition) and re-dispatches `builder`.
+   - **FAIL (1st time)**: Boss writes targeted fix instructions (file + line + post-condition) and resumes the `builder` already dispatched — it still holds the spec, so a fresh dispatch would pay a second cold start for nothing.
    - **FAIL (2nd time)**: Defect is in the spec (~80% probability). Boss fixes spec and restarts build.
    - **FAIL (3rd time)**: Halts loop and escalates to the user.
 7. **Step 6 — Bookkeeping & Audit Logging (`scribe` | Haiku default)**:

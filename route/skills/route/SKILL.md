@@ -183,6 +183,16 @@ command and result rather than re-running anything. The Boss must run the final 
 command again after any review fix before recording. Reviewer returns `PASS`/`FAIL` and
 findings, never fixes.
 
+The Boss also writes the change itself to a file **outside the repository** (a temp path — an
+untracked diff inside the repo gets committed by accident) and passes reviewer that path.
+For edits to tracked files that is `git diff`. For files that are new, say so instead: the
+whole file is the change and a diff adds nothing.
+
+On an eight-file change in this project, the changed files came to about 17,800 tokens read
+in full against about 2,600 tokens as a diff — 6.8x. Reviewer has no Bash, so without the
+diff it reconstructs the change boundary by reading whole files and comparing them against a
+prose contract. That is both the larger read and the weaker signal.
+
 If you skip review, say so in one line and name which trigger you checked. A silent
 skip is how this step stopped happening.
 
@@ -192,10 +202,14 @@ skip is how this step stopped happening.
 | --- | --- |
 | PASS, no findings | go to step 6 |
 | PASS with RISK | record the risk in the project's bug-tracking doc when bookkeeping is enabled; otherwise carry it into the final outcome, then go to step 6 |
-| FAIL, 1st time | write a fix instruction naming file + line + required post-condition; re-dispatch `route:builder` |
+| FAIL, 1st time | write a fix instruction naming file + line + required post-condition; resume the builder you already dispatched (in Claude Code, `SendMessage` to that agent) and send only the fix instruction |
 | FAIL, 2nd time | **stop dispatching.** The defect is in the spec ~80% of the time. Fix the spec, restart from step 3 |
 | FAIL, 3rd time | stop and ask the user. Do not loop |
 | reviewer returned no `VERDICT`, or builder returned no report block | treat as truncated, never as PASS; re-dispatch with a narrower `Files` list or split the task |
+
+One session of this project issued 11 subagent dispatches that produced only 6 transcripts,
+because the repeat rounds were resumes; each resume skipped the system prompt, tool
+definitions and project instructions that Step 0.25 identifies as the flat floor.
 
 Never forward reviewer's raw text to builder. Translate it into an instruction.
 
@@ -211,13 +225,18 @@ There is no implicit `version` field; pass one only when the task explicitly def
 Do not update the tracking docs yourself — it is mechanical work at the most expensive rate
 in the system, and a hook will ask you to reconsider if you try.
 
-**Lane 0 is the exception.** A one-line record for work you did inline sits below the
-dispatch floor (Step 0.25) — a scribe cold start costs several times what the line is
-worth. Append it yourself and confirm the guard's `ask`. Two projects will behave
-differently: one that set `guard.mainSeverity` to `deny` has decided the Boss never writes
-records, so dispatch scribe there instead; one that set it to `off` gets no prompt at all,
-so write the line and move on. From Lane 1 and Lane 2, always dispatch scribe — there is a
-real outcome to write up.
+**What decides is how much bookkeeping there is, not which lane produced it.** Dispatch
+scribe when there is real work in the record — several files to list, a risk to write up,
+entries to move into an archive, a commit message to compose. Append the line yourself when
+the record is one or two lines, whatever the lane. Two projects will behave differently: one
+that set `guard.mainSeverity` to `deny` has decided the Boss never writes records, so
+dispatch scribe there regardless; one that set it to `off` gets no prompt at all, so write
+the line and move on.
+
+On one session of this project a scribe dispatch that appended a short outcome returned a
+net context saving of about 260 tokens against a dispatch cost of about 1,230 — it did not
+pay for itself, exactly as Step 0.25 predicts for work that fits inside the prompt describing
+it.
 
 ## Escalate to the main session when
 
