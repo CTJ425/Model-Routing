@@ -1,0 +1,792 @@
+<title>86 分鐘的沉默</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Noto+Serif+TC:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground:      #F6F7F9;
+    --surface:     #FFFFFF;
+    --surface-alt: #EFF1F5;
+    --ink:         #14171D;
+    --ink-soft:    #3D4550;
+    --muted:       #626B7A;
+    --rule:        #DDE2EA;
+    --rule-strong: #C3CAD6;
+    --accent:      #2E5C8A;
+    --accent-soft: #E6EDF5;
+    --warn:        #B0671A;
+    --warn-soft:   #F7ECDC;
+    --crit:        #A33B33;
+    --crit-soft:   #F8E7E5;
+    --good:        #3A7355;
+    --shadow:      0 1px 2px rgba(20,23,29,.05), 0 8px 24px -12px rgba(20,23,29,.12);
+
+    --serif: 'Spectral', 'Noto Serif TC', Georgia, serif;
+    --sans:  'IBM Plex Mono', 'Noto Sans TC', ui-monospace, monospace;
+    --mono:  'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  }
+
+  :root:not([data-theme="light"]) {
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground:      #11141A;
+      --surface:     #181C23;
+      --surface-alt: #1F242D;
+      --ink:         #E7EAF0;
+      --ink-soft:    #C3C9D4;
+      --muted:       #939BA9;
+      --rule:        #2B313B;
+      --rule-strong: #3C4450;
+      --accent:      #7FA9D6;
+      --accent-soft: #1D2836;
+      --warn:        #DCA35C;
+      --warn-soft:   #2E2517;
+      --crit:        #E07C72;
+      --crit-soft:   #331E1C;
+      --good:        #74B492;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground:      #11141A;
+    --surface:     #181C23;
+    --surface-alt: #1F242D;
+    --ink:         #E7EAF0;
+    --ink-soft:    #C3C9D4;
+    --muted:       #939BA9;
+    --rule:        #2B313B;
+    --rule-strong: #3C4450;
+    --accent:      #7FA9D6;
+    --accent-soft: #1D2836;
+    --warn:        #DCA35C;
+    --warn-soft:   #2E2517;
+    --crit:        #E07C72;
+    --crit-soft:   #331E1C;
+    --good:        #74B492;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.72;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+
+  .col { max-width: 68ch; }
+
+  /* ---------- masthead ---------- */
+
+  header.mast {
+    padding: 72px 0 40px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 40px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 20px;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: clamp(2.6rem, 6vw, 4rem);
+    line-height: 1.06;
+    letter-spacing: -.015em;
+    margin: 0 0 22px;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: 1.16rem;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: 60ch;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    margin-top: 30px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .meta b { color: var(--ink-soft); font-weight: 500; }
+
+  /* ---------- headline stats ---------- */
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 0 0 56px;
+  }
+  .stat { background: var(--surface); padding: 22px 20px 20px; }
+  .stat .k {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .stat .v {
+    font-family: var(--mono);
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    margin: 0 0 6px;
+  }
+  .stat .n { font-size: .84rem; line-height: 1.5; color: var(--muted); margin: 0; font-family: var(--sans); }
+  .stat.is-crit .v { color: var(--crit); }
+  .stat.is-warn .v { color: var(--warn); }
+
+  /* ---------- sections ---------- */
+
+  section { margin: 0 0 60px; }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 1.72rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -.01em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--serif);
+    font-size: 1.14rem;
+    font-weight: 600;
+    margin: 34px 0 8px;
+  }
+
+  p { margin: 0 0 18px; }
+  .col p:last-child { margin-bottom: 0; }
+
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  code, .num {
+    font-family: var(--mono);
+    font-size: .875em;
+    font-variant-numeric: tabular-nums;
+  }
+  code {
+    background: var(--surface-alt);
+    padding: .12em .38em;
+    border-radius: 3px;
+  }
+
+  .lede {
+    font-size: 1.02rem;
+    color: var(--muted);
+    font-family: var(--sans);
+    margin: 0 0 26px;
+    max-width: 62ch;
+  }
+
+  /* ---------- chart ---------- */
+
+  .chart {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 26px 24px 20px;
+    box-shadow: var(--shadow);
+  }
+
+  .chart + .chart { margin-top: 20px; }
+
+  .chart-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 22px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .chart-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin: 0;
+  }
+  .chart-sub {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .rows { display: flex; flex-direction: column; gap: 5px; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 26px 84px 1fr 76px;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .row .idx { color: var(--muted); text-align: right; font-size: 11px; }
+  .row .role { color: var(--ink-soft); font-size: 11.5px; }
+  .row .dur { text-align: right; color: var(--ink-soft); }
+
+  .track {
+    position: relative;
+    height: 15px;
+    background: var(--surface-alt);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--accent);
+    border-radius: 2px;
+    min-width: 2px;
+  }
+  .bar.warn { background: var(--warn); }
+  .bar.crit {
+    background: repeating-linear-gradient(
+      -45deg, var(--crit) 0 5px, color-mix(in srgb, var(--crit) 62%, transparent) 5px 10px
+    );
+  }
+
+  .row.flag .idx,
+  .row.flag .role,
+  .row.flag .dur { color: var(--crit); font-weight: 500; }
+  .row.flag-warn .idx,
+  .row.flag-warn .role,
+  .row.flag-warn .dur { color: var(--warn); font-weight: 500; }
+
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    letter-spacing: .06em;
+  }
+
+  /* ---------- table ---------- */
+
+  .scroller { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    min-width: 660px;
+  }
+  thead th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 12px 10px 0;
+    border-bottom: 1.5px solid var(--rule-strong);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: baseline;
+  }
+  tbody tr:hover td { background: var(--surface-alt); }
+  td.n { text-align: right; }
+  td.task { font-family: var(--sans); color: var(--ink-soft); }
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .04em;
+    padding: 2px 7px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .pill.ok   { color: var(--good); background: transparent; }
+  .pill.warn { color: var(--warn); background: var(--warn-soft); }
+  .pill.crit { color: var(--crit); background: var(--crit-soft); }
+
+  /* ---------- findings ---------- */
+
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 26px 28px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+  }
+  .finding > *:last-child { margin-bottom: 0; }
+
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    margin-bottom: 14px;
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .tag.t-stall { color: var(--crit); background: var(--crit-soft); }
+  .tag.t-hook  { color: var(--warn); background: var(--warn-soft); }
+
+  .finding h3 { margin-top: 0; font-size: 1.24rem; }
+  .finding p { max-width: 68ch; }
+
+  blockquote {
+    margin: 18px 0;
+    padding: 12px 0 12px 18px;
+    border-left: 2px solid var(--rule-strong);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.68;
+    color: var(--ink-soft);
+  }
+  blockquote p { margin: 0 0 8px; max-width: none; }
+  blockquote p:last-child { margin: 0; }
+
+  .rule-out {
+    margin-top: 18px;
+    padding: 14px 16px;
+    background: var(--accent-soft);
+    border-radius: 3px;
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.62;
+  }
+  .rule-out b {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+  }
+
+  /* ---------- checklist ---------- */
+
+  ol.actions {
+    counter-reset: a;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  ol.actions li {
+    counter-increment: a;
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: .98rem;
+    line-height: 1.62;
+  }
+  ol.actions li::before {
+    content: counter(a, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent);
+    padding-top: .32em;
+  }
+
+  footer {
+    margin-top: 72px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+
+  @media (max-width: 620px) {
+    body { font-size: 16px; }
+    .row { grid-template-columns: 22px 1fr 68px; }
+    .row .role { display: none; }
+    .finding { padding: 22px 20px; }
+    header.mast { padding-top: 48px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">stock-pnl-web · 子代理行為觀察</p>
+    <h1>86 分鐘的沉默</h1>
+    <p class="standfirst">
+      一次 session、19 個子代理派工。其中兩個吃掉了將近四分之三的等待時間，而它們的
+      token 用量與工具呼叫次數都毫不起眼。這份報告記錄那兩次停滯，以及一個把
+      「剛派出」講成「剛回來」的 hook。
+    </p>
+    <div class="meta">
+      <span><b>日期</b> 2026-08-24</span>
+      <span><b>版本</b> 0.9.11 → 0.9.12</span>
+      <span><b>樣本</b> 單一 session，19 次派工</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <p class="k">派工總數</p>
+      <p class="v">19</p>
+      <p class="n">18 個完成，1 個被主 session 終止</p>
+    </div>
+    <div class="stat">
+      <p class="k">中位數耗時</p>
+      <p class="v">1m42s</p>
+      <p class="n">18 個完成派工的中位數</p>
+    </div>
+    <div class="stat is-crit">
+      <p class="k">最慢一次</p>
+      <p class="v">86m24s</p>
+      <p class="n">中位數的 51 倍，僅 13 次工具呼叫</p>
+    </div>
+    <div class="stat is-warn">
+      <p class="k">兩個異常佔比</p>
+      <p class="v">74%</p>
+      <p class="n">佔全部子代理等待時間</p>
+    </div>
+  </div>
+
+  <section>
+    <div class="col">
+      <h2>等待時間的分布</h2>
+      <p class="lede">
+        每一條是一次派工的實際掛鐘時間。線性刻度，沒有壓縮——那道斷崖本身就是結論。
+      </p>
+    </div>
+
+    <div class="chart">
+      <div class="chart-head">
+        <p class="chart-title">全部 19 次派工</p>
+        <p class="chart-sub">線性刻度，滿格 = 86m24s</p>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="idx">01</span><span class="role">scout</span><span class="track"><span class="bar" style="width:1.14%"></span></span><span class="dur">59s</span></div>
+        <div class="row"><span class="idx">02</span><span class="role">builder</span><span class="track"><span class="bar" style="width:3.33%"></span></span><span class="dur">2m52s</span></div>
+        <div class="row"><span class="idx">03</span><span class="role">reviewer</span><span class="track"><span class="bar" style="width:1.19%"></span></span><span class="dur">1m02s</span></div>
+        <div class="row"><span class="idx">04</span><span class="role">builder</span><span class="track"><span class="bar" style="width:0.67%"></span></span><span class="dur">35s</span></div>
+        <div class="row"><span class="idx">05</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:3.62%"></span></span><span class="dur">3m08s</span></div>
+        <div class="row"><span class="idx">06</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:3.41%"></span></span><span class="dur">2m57s</span></div>
+        <div class="row"><span class="idx">07</span><span class="role">scout</span><span class="track"><span class="bar" style="width:1.03%"></span></span><span class="dur">53s</span></div>
+        <div class="row flag-warn"><span class="idx">08</span><span class="role">builder</span><span class="track"><span class="bar warn" style="width:11.4%"></span></span><span class="dur">9m51s</span></div>
+        <div class="row"><span class="idx">09</span><span class="role">reviewer</span><span class="track"><span class="bar" style="width:1.53%"></span></span><span class="dur">1m19s</span></div>
+        <div class="row"><span class="idx">10</span><span class="role">builder</span><span class="track"><span class="bar" style="width:1.24%"></span></span><span class="dur">1m04s</span></div>
+        <div class="row"><span class="idx">11</span><span class="role">reviewer</span><span class="track"><span class="bar" style="width:1.84%"></span></span><span class="dur">1m35s</span></div>
+        <div class="row"><span class="idx">12</span><span class="role">builder</span><span class="track"><span class="bar" style="width:0.86%"></span></span><span class="dur">45s</span></div>
+        <div class="row flag"><span class="idx">13</span><span class="role">scribe</span><span class="track"><span class="bar crit" style="width:39.3%"></span></span><span class="dur">≥34m</span></div>
+        <div class="row"><span class="idx">14</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:3.86%"></span></span><span class="dur">3m20s</span></div>
+        <div class="row"><span class="idx">15</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:1.72%"></span></span><span class="dur">1m29s</span></div>
+        <div class="row"><span class="idx">16</span><span class="role">builder</span><span class="track"><span class="bar" style="width:6.03%"></span></span><span class="dur">5m13s</span></div>
+        <div class="row"><span class="idx">17</span><span class="role">reviewer</span><span class="track"><span class="bar" style="width:2.09%"></span></span><span class="dur">1m48s</span></div>
+        <div class="row flag"><span class="idx">18</span><span class="role">builder</span><span class="track"><span class="bar crit" style="width:100%"></span></span><span class="dur">86m24s</span></div>
+        <div class="row"><span class="idx">19</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:3.50%"></span></span><span class="dur">3m02s</span></div>
+      </div>
+      <div class="axis"><span>0</span><span>約 43 分</span><span>86m24s</span></div>
+    </div>
+
+    <div class="chart">
+      <div class="chart-head">
+        <p class="chart-title">拿掉兩個異常後的其餘 17 次</p>
+        <p class="chart-sub">重新縮放，滿格 = 9m51s——這才是正常樣貌</p>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="idx">01</span><span class="role">scout</span><span class="track"><span class="bar" style="width:9.98%"></span></span><span class="dur">59s</span></div>
+        <div class="row"><span class="idx">02</span><span class="role">builder</span><span class="track"><span class="bar" style="width:29.2%"></span></span><span class="dur">2m52s</span></div>
+        <div class="row"><span class="idx">03</span><span class="role">reviewer</span><span class="track"><span class="bar" style="width:10.4%"></span></span><span class="dur">1m02s</span></div>
+        <div class="row"><span class="idx">04</span><span class="role">builder</span><span class="track"><span class="bar" style="width:5.85%"></span></span><span class="dur">35s</span></div>
+        <div class="row"><span class="idx">05</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:31.8%"></span></span><span class="dur">3m08s</span></div>
+        <div class="row"><span class="idx">06</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:29.9%"></span></span><span class="dur">2m57s</span></div>
+        <div class="row"><span class="idx">07</span><span class="role">scout</span><span class="track"><span class="bar" style="width:9.01%"></span></span><span class="dur">53s</span></div>
+        <div class="row flag-warn"><span class="idx">08</span><span class="role">builder</span><span class="track"><span class="bar warn" style="width:100%"></span></span><span class="dur">9m51s</span></div>
+        <div class="row"><span class="idx">09</span><span class="role">reviewer</span><span class="track"><span class="bar" style="width:13.4%"></span></span><span class="dur">1m19s</span></div>
+        <div class="row"><span class="idx">10</span><span class="role">builder</span><span class="track"><span class="bar" style="width:10.9%"></span></span><span class="dur">1m04s</span></div>
+        <div class="row"><span class="idx">11</span><span class="role">reviewer</span><span class="track"><span class="bar" style="width:16.1%"></span></span><span class="dur">1m35s</span></div>
+        <div class="row"><span class="idx">12</span><span class="role">builder</span><span class="track"><span class="bar" style="width:7.53%"></span></span><span class="dur">45s</span></div>
+        <div class="row"><span class="idx">14</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:33.8%"></span></span><span class="dur">3m20s</span></div>
+        <div class="row"><span class="idx">15</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:15.1%"></span></span><span class="dur">1m29s</span></div>
+        <div class="row"><span class="idx">16</span><span class="role">builder</span><span class="track"><span class="bar" style="width:52.9%"></span></span><span class="dur">5m13s</span></div>
+        <div class="row"><span class="idx">17</span><span class="role">reviewer</span><span class="track"><span class="bar" style="width:18.3%"></span></span><span class="dur">1m48s</span></div>
+        <div class="row"><span class="idx">19</span><span class="role">scribe</span><span class="track"><span class="bar" style="width:30.8%"></span></span><span class="dur">3m02s</span></div>
+      </div>
+      <div class="axis"><span>0</span><span>約 5 分</span><span>9m51s</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <h2>完整派工紀錄</h2>
+      <p class="lede">
+        依派出順序。token 與工具呼叫次數與耗時完全不相關——這正是「停滯」與「工作量大」的分野。
+      </p>
+    </div>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>角色</th><th>任務</th>
+            <th style="text-align:right">耗時</th>
+            <th style="text-align:right">工具</th>
+            <th style="text-align:right">Tokens</th>
+            <th>結果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>01</td><td>scout</td><td class="task">盤點備份相關程式碼</td><td class="n">59s</td><td class="n">26</td><td class="n">42.5k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>02</td><td>builder</td><td class="task">備份 Edge Function 第一階段</td><td class="n">2m52s</td><td class="n">30</td><td class="n">43.5k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>03</td><td>reviewer</td><td class="task">審第一階段</td><td class="n">1m02s</td><td class="n">12</td><td class="n">28.8k</td><td><span class="pill ok">PASS + RISK</span></td></tr>
+          <tr><td>04</td><td>builder</td><td class="task">三項審查修正</td><td class="n">35s</td><td class="n">11</td><td class="n">19.9k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>05</td><td>scribe</td><td class="task">記錄第一階段</td><td class="n">3m08s</td><td class="n">21</td><td class="n">45.2k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>06</td><td>scribe</td><td class="task">記錄 DEV 部署</td><td class="n">2m57s</td><td class="n">20</td><td class="n">52.2k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>07</td><td>scout</td><td class="task">盤點管理後台結構</td><td class="n">53s</td><td class="n">16</td><td class="n">32.4k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>08</td><td>builder</td><td class="task">管理後台備份頁</td><td class="n">9m51s</td><td class="n">65</td><td class="n">84.9k</td><td><span class="pill warn">回報被截斷</span></td></tr>
+          <tr><td>09</td><td>reviewer</td><td class="task">審管理後台</td><td class="n">1m19s</td><td class="n">22</td><td class="n">37.5k</td><td><span class="pill ok">PASS + RISK</span></td></tr>
+          <tr><td>10</td><td>builder</td><td class="task">RISK-001 預算檢查</td><td class="n">1m04s</td><td class="n">15</td><td class="n">27.6k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>11</td><td>reviewer</td><td class="task">審 RISK-001 與簽名網址</td><td class="n">1m35s</td><td class="n">17</td><td class="n">35.8k</td><td><span class="pill warn">FAIL（誤判）</span></td></tr>
+          <tr><td>12</td><td>builder</td><td class="task">簽名網址 origin 修正</td><td class="n">45s</td><td class="n">13</td><td class="n">24.8k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>13</td><td>scribe</td><td class="task">記錄 0.9.11</td><td class="n">≥34m</td><td class="n">—</td><td class="n">—</td><td><span class="pill crit">終止，零寫入</span></td></tr>
+          <tr><td>14</td><td>scribe</td><td class="task">記錄 0.9.11（重試）</td><td class="n">3m20s</td><td class="n">22</td><td class="n">49.4k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>15</td><td>scribe</td><td class="task">結案 Task 131</td><td class="n">1m29s</td><td class="n">12</td><td class="n">28.0k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>16</td><td>builder</td><td class="task">一鍵還原功能</td><td class="n">5m13s</td><td class="n">34</td><td class="n">61.6k</td><td><span class="pill ok">ok</span></td></tr>
+          <tr><td>17</td><td>reviewer</td><td class="task">審還原功能</td><td class="n">1m48s</td><td class="n">16</td><td class="n">41.3k</td><td><span class="pill ok">PASS + RISK</span></td></tr>
+          <tr><td>18</td><td>builder</td><td class="task">半途失敗訊息</td><td class="n">86m24s</td><td class="n">13</td><td class="n">30.3k</td><td><span class="pill crit">停滯</span></td></tr>
+          <tr><td>19</td><td>scribe</td><td class="task">記錄 0.9.12</td><td class="n">3m02s</td><td class="n">26</td><td class="n">47.1k</td><td><span class="pill ok">ok</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <h2>觀察到的六件事</h2>
+      <p class="lede">
+        標籤標示的是性質，不是嚴重度排序——它們彼此獨立，沒有先後關係。
+      </p>
+    </div>
+
+    <div class="finding">
+      <span class="tag t-stall">停滯</span>
+      <h3>兩次派工吃掉將近四分之三的等待時間</h3>
+      <p>
+        第 18 號派工跑了 <span class="num">86 分 24 秒</span>，只做了 13 次工具呼叫、用掉 30k token。
+        第 12 號做的是結構上完全相同的工作——對兩個檔案做小而明確的修改——
+        <span class="num">45 秒</span>完成，同樣是 13 次工具呼叫。同一個角色、同一種形狀的任務，
+        <b>掛鐘時間差 116 倍</b>。
+      </p>
+      <p>
+        它的產出是正確的：回報格式完整、測試通過、主 session 獨立複驗也同意。
+        輸出裡沒有任何東西能解釋那 86 分鐘，而工具呼叫次數排除了「它只是慢慢做了很多事」。
+        這看起來是執行環境的停滯，不是一個昂貴的任務。
+      </p>
+      <p>
+        掛鐘時間不計費，但它會卡住整條產線：主 session 在派工回來之前無法裁決、部署或提交。
+        第 13 號停滯期間，harness 自己也注意到了，發出一則 goal check-in 說「因為背景工作仍在執行，
+        評估已延後 34 分鐘」。
+      </p>
+      <div class="rule-out">
+        <b>可操作的判準</b>
+        當一次派工的掛鐘時間超過該角色中位數的約 10 倍，它不是「快好了」——去查。
+        不必讀子代理的 transcript（那是個大到會撐爆呼叫端 context 的 JSONL），
+        <code>git status</code> 與檔案 mtime 就能看出它到底寫過東西沒有。
+        第 13 號在 34 分鐘後<b style="display:inline;font-family:inherit;font-size:inherit;letter-spacing:0;text-transform:none;color:inherit">一個檔都沒寫</b>。
+      </div>
+    </div>
+
+    <div class="finding">
+      <span class="tag t-hook">Hook</span>
+      <h3>routing hook 在「派出時」就宣告「剛回來」</h3>
+      <p>
+        <code>route</code> plugin 的 <code>PostToolUse:Agent</code> hook 會送出這句：
+      </p>
+      <blockquote>
+        <p>[routing] <code>builder</code> just returned. Before moving on, apply the Step 4 review policy…</p>
+      </blockquote>
+      <p>
+        這段文字是附在<b>啟動</b>的結果上的——就是那個寫著
+        <code>Async agent launched successfully</code> 的同一個 tool result，
+        而且在我發出的 7 次 <code>route:builder</code> 派工中出現了 6 次。
+        因為這些代理跑在背景，<code>Agent</code> 工具呼叫在啟動當下就回傳了，
+        <code>PostToolUse</code> 自然也就在那時觸發。builder 根本還沒回來，它才剛開始。
+      </p>
+      <p>
+        這則提醒本身有用，但它的措辭會誘導出錯誤動作：在那個當下去套用 Step 4 審查政策，
+        等於派一個 reviewer 去審一批還不存在的檔案。正確的讀法是
+        「你剛派出一個 builder，記得規劃審查」，而審查必須等完成通知。
+      </p>
+      <p>scout、reviewer、scribe 的派工則不會觸發這則 hook。</p>
+    </div>
+
+    <div class="finding">
+      <span class="tag t-stall">停滯</span>
+      <h3>被終止的代理仍會回報最後一句話，那就是診斷依據</h3>
+      <p>
+        對第 13 號執行 <code>TaskStop</code> 後，收到的是一則正常的 task-notification，
+        <code>status: killed</code>，而 <code>result</code> 欄位裡是它的最後一句話：
+      </p>
+      <blockquote>
+        <p>Now I'll record the release following the size-discipline rolling rules. Let me work in the correct order: destination files first, then source files.</p>
+        <p><b>Step 1: Prepend oldest PROGRESS.md entry to PROGRESS_ARCHIVE.md</b></p>
+      </blockquote>
+      <p>
+        34 分鐘過去，還在宣告四個步驟中的第一步。就是這一行讓我判定這是停滯而非緩慢進展，
+        而取得它的代價是零——不像那個絕對不能讀的 <code>.output</code> transcript。
+      </p>
+      <p>
+        重試在 <span class="num">3 分 20 秒</span>內完成。它的 prompt 短了大約 40%，
+        同樣四項編輯改用編號清單而非散文敘述。單一 session 不足以證明 prompt 長度就是停滯主因，
+        但把 brief 縮短是零成本的，而重試是目前唯一的資料點。
+      </p>
+    </div>
+
+    <div class="finding">
+      <span class="tag">流程</span>
+      <h3>builder 會把呼叫端的髒工作區當成 blocker 回報</h3>
+      <p>
+        第 10、12、16、18 號派工的回報都以一段 <code>BLOCKERS:</code> 收尾，
+        列出主 session 自己改過的檔案——版號更新、其他 builder 的產出、派工前先寫好的測試。例如：
+      </p>
+      <blockquote>
+        <p>git status shows README.md, package.json, package-lock.json, and src/version.ts already modified before I started. None of these are in my Files list; I left them untouched.</p>
+      </blockquote>
+      <p>
+        這個行為是<b>對的</b>——代理守住了範圍並且說明了。但它讓每份回報都以一個看起來很嚇人的標題結尾，
+        每次都得讀過再排除。往一個本來就有無關改動的工作區派工時，在 brief 裡先說明，
+        代理就會把它歸類為背景脈絡而不是阻礙。
+      </p>
+    </div>
+
+    <div class="finding">
+      <span class="tag">流程</span>
+      <h3>沒被告知流程規則的 reviewer 會給出誤判的 FAIL</h3>
+      <p>
+        第 11 號回傳 <b>FAIL</b> 與兩個 BLOCKER，形式都是「測試檔被修改但不在 builder 的
+        <code>Files</code> 清單裡」。那兩個測試檔是<b>主 session 在派工前寫的</b>，
+        這正是本專案 Lane 2 的既定流程，builder 從未碰過。
+        reviewer 套用了「測試檔在範圍外被改動 ⇒ 自動 FAIL」，卻不知道是誰寫的。
+      </p>
+      <p>
+        它在同一份回應裡的實質分析非常徹底，而且沒有找到任何缺陷，所以裁決改判為 PASS。
+        之後的 reviewer 派工都加上一句話說明測試由主 session 擁有，誤判就沒有再發生。
+      </p>
+      <div class="rule-out">
+        <b>規則</b>
+        reviewer 不會繼承任何關於派工協定的記憶。如果流程允許某個檔案在 builder 的範圍外被改動，
+        就必須明白告訴它——否則它會正確地套用一條它不該套用的規則。
+      </div>
+    </div>
+
+    <div class="finding">
+      <span class="tag t-hook">回報</span>
+      <h3>狀態顯示完成的代理，回報仍可能無法使用</h3>
+      <p>
+        第 8 號在 <span class="num">9 分 51 秒</span>、65 次工具呼叫後以
+        <code>status: completed</code> 結束，但它的最終回報是：
+      </p>
+      <blockquote>
+        <p>Line 641 confirms it. Let's inspect context.</p>
+      </blockquote>
+      <p>
+        這不是一份完成報告，而是一句被切斷的思考。工作其實有落地：檔案都在，測試也幾乎全綠。
+        但那份回報既無法信任也無法解析，於是主 session 用 <code>git status</code>
+        與一次測試自行重建狀態，並發現兩條真的失敗的測試——那是回報本來就該提到的。
+      </p>
+      <div class="rule-out">
+        <b>規則</b>
+        <code>status: completed</code> 描述的是流程，不是答案。
+        一份沒有包含約定欄位（檔案清單、測試數、verify 指令）的回報，就等於沒有回報，
+        呼叫端必須自行驗證。而這種驗證很便宜，其實應該無條件做。
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <h2>要改的六件事</h2>
+      <ol class="actions">
+        <li>把掛鐘時間當成需要監看的訊號。超過該角色中位數約 10 倍時，去查它寫了什麼檔，而不是繼續等。</li>
+        <li>把 routing hook 的「just returned」讀成「just dispatched」。審查一律等完成通知。</li>
+        <li>scribe 的 brief 保持精簡並編號。這次唯一用長篇散文寫的那一份，就是停滯的那一份。</li>
+        <li>工作區若已因無關原因變髒，在派工時先講。</li>
+        <li>告訴 reviewer 哪些檔案是主 session 擁有的。</li>
+        <li>不論回報的 status 為何，都獨立驗證 builder 的宣稱。綠色的回報和綠色的測試不是同一件事。</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    資料來源：本次 session 的 task-notification 內容（duration_ms、tool_uses、subagent_tokens）。<br>
+    單一 session 樣本，請據此看待統計強度。第 13 號被終止，其 token 與工具次數無從取得。<br>
+    對應的 repo 文件：<code>docs/subagent-reliability-2026-08-24.md</code>
+  </footer>
+
+</div>
