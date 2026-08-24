@@ -132,9 +132,13 @@ def test_builder_return_nudges_about_review(project):
     assert "Step 4 review policy" in dispatch_return(project, "route:builder")
 
 
-def test_builder_async_launch_is_silent(project):
-    assert dispatch_return(project, "route:builder",
-                           tool_result="Async agent launched successfully. Task id: task-1") is None
+def test_builder_async_launch_says_dispatched_not_returned(project):
+    text = dispatch_return(project, "route:builder",
+                           tool_result="Async agent launched successfully. Task id: task-1")
+    assert "just returned" not in text
+    assert "dispatched" in text
+    assert "completion notification" in text
+    assert "dispatch `route:reviewer` now" not in text
 
 
 def test_reviewer_return_is_silent(project):

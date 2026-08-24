@@ -17,9 +17,11 @@ Five jobs, selected by hook_event_name:
       silently because each individual Read looks cheap. Past a threshold the hook says
       so, in context, while the leak is still happening.
 
-  PostToolUse(Agent|Task)       -> after a `builder` dispatch returns, restate the
-      review policy. Every other failure mode in this system announces itself; a
-      skipped review was the one that was completely silent.
+  PostToolUse(Agent|Task)       -> on a `builder` dispatch, restate the review policy.
+      Every other failure mode in this system announces itself; a skipped review was
+      the one that was completely silent. A background dispatch returns its launch,
+      not its result, so the wording says "plan the review" there and "review now"
+      only when the tool result really is the agent's.
 
   SessionEnd                    -> delete this session's state files.
 
@@ -117,9 +119,21 @@ REVIEW_TRIGGER_TEXT = {
 }
 
 
-def review_nudge(cfg) -> str:
+def review_nudge(cfg, launched: bool = False) -> str:
+    """`launched` means the tool result was the async launch, not the agent's result."""
     review = cfg.get("review") or {}
     policy = review.get("policy", "risk")
+    if launched:
+        lead = ("[routing] `builder` dispatched \u2014 this is the launch result, not the "
+                "agent's. ")
+        when = "When its completion notification arrives, apply"
+        act = ("Do not dispatch `route:reviewer` until you hold builder's file list and "
+               "builder's VERIFY line.")
+    else:
+        lead = "[routing] `builder` just returned. "
+        when = "Before moving on, apply"
+        act = ("If you are not skipping, dispatch `route:reviewer` now with the brief, "
+               "builder's file list, and builder's VERIFY line.")
     if policy == "always":
         condition = "every builder round"
     else:
@@ -132,19 +146,16 @@ def review_nudge(cfg) -> str:
             clauses = list(REVIEW_TRIGGER_TEXT.values())
         if not clauses:
             return (
-                "[routing] `builder` just returned. `review.policy` is `risk`, but no "
-                "automatic risk triggers are configured. Record that review was skipped, "
-                "or dispatch `route:reviewer` if your task needs an explicit review."
+                lead + "`review.policy` is `risk`, but no automatic risk triggers are "
+                "configured. Record that review was skipped, or dispatch `route:reviewer` "
+                "if your task needs an explicit review."
             )
         condition = " or ".join(clauses)
 
     return (
-        "[routing] `builder` just returned. Before moving on, apply the Step 4 review "
-        "policy: review is required for %s. If you are skipping review, name in one "
-        "line which trigger you checked. If you are not skipping, dispatch "
-        "`route:reviewer` now with the brief, builder's file list, and builder's "
-        "VERIFY line."
-    ) % condition
+        "%s%s the Step 4 review policy: review is required for %s. If you are skipping "
+        "review, name in one line which trigger you checked. %s"
+    ) % (lead, when, condition, act)
 
 
 def _hot(cfg, key):
@@ -266,8 +277,6 @@ def is_async_launch(payload: dict) -> bool:
 
 
 def handle_dispatch_return(payload) -> None:
-    if is_async_launch(payload):
-        return
     cfg = load_config(project_dir(payload))
     review = cfg.get("review") or {}
     if review.get("policy") == "never" or not review.get("nudge", True):
@@ -277,7 +286,7 @@ def handle_dispatch_return(payload) -> None:
         return  # reviewer returning is the normal path; silence is correct there
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PostToolUse",
-        "additionalContext": review_nudge(cfg),
+        "additionalContext": review_nudge(cfg, launched=is_async_launch(payload)),
     }}))
 
 
