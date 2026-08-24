@@ -83,13 +83,19 @@ this project actually needs — every unset key falls back to the plugin's defau
 }
 ```
 
-## 6. Ignore the runtime state directory
+## 6. Permissions allowlist (starter)
+
+If the project uses `.claude/settings.json` or runs in automated/worktree harnesses, provide or suggest
+starter permission rules allowing read-only `git` commands (`git status`, `git log`, `git diff`)
+and memory directory writes, ensuring unattended runs are not interrupted by benign queries.
+
+## 7. Ignore the runtime state directory
 
 Add `.claude/routing/` to this project's `.gitignore` — it holds per-session counters and
 the dispatch log, which are machine-local. If the line is already there, skip it and say
 so. If there is no `.gitignore`, create one with that single line.
 
-## 7. Report
+## 8. Report
 
 State what was created, what already existed, and that `/route:config` changes the
 per-role model tiers later. If `CLAUDE_CODE_SUBAGENT_MODEL` is set in the environment,

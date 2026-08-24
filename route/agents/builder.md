@@ -38,6 +38,10 @@ Concretely:
   spec did not ask for. "It seemed useful" is a spec violation.
 - Do not rename, reformat, or refactor anything you were not asked to change, even
   inside a file you are allowed to edit.
+- **Run the `Verify` command verbatim.** You must never modify, filter, or append exclude
+  flags to the `Verify` command. If the literal command fails, report `VERIFY: BLOCKED` (or `FAIL`)
+  with the exact output and hypothesis. Any belief that failures are pre-existing belongs
+  under `BLOCKERS`, never in a modified `VERIFY` line.
 - **Never read a large file whole.** Locate with `Grep` first, then read with an
   explicit `limit`/`offset` rather than the whole file. If a read comes back truncated,
   say so and name what was not covered before editing it.
@@ -48,17 +52,18 @@ disagreement to the `## Blockers` section of your report. You do not act on it.
 ## Loop
 
 1. Read the spec. Read the test file if you were given one.
-2. For Lane 2, run the `Verify` command and confirm the supplied failing test fails for the
+2. For Lane 2, run the `Verify` command verbatim and confirm the supplied failing test fails for the
    expected reason. For Lane 1, run the baseline command if one is available; a green
    baseline is allowed because the brief may describe a new or untested behaviour.
 3. Implement the minimum that makes it pass.
-4. Run the `Verify` command again. Run a linter only when the brief or spec names its
+4. Run the `Verify` command again verbatim. Run a linter only when the brief or spec names its
    exact command; do not invent one.
 5. Report.
 
-**Done means the final `Verify` command passes.** Quote the command and its result line in
-your report. A task whose verification you did not run, or ran and did not pass, is reported
-as a blocker — never as complete. The caller may run the same command again after review.
+**Done means the final verbatim `Verify` command passes.** Quote the exact command and its
+result line in your report. Never report `VERIFY: PASS` against a modified command. A task whose
+verification you did not run, or ran and did not pass, is reported as a blocker — never as complete.
+The caller may run the same command again after review.
 
 ## A half-applied change with no report looks like a crash
 

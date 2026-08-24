@@ -248,7 +248,26 @@ def handle_discovery(payload, d: str) -> None:
     }}))
 
 
+ASYNC_LAUNCH_RE = re.compile(
+    r"async\s+agent\s+launched|launched\s+successfully|started\s+in\s+background|task\s+id\s+.*running",
+    re.I,
+)
+
+
+def is_async_launch(payload: dict) -> bool:
+    for k in ("tool_result", "tool_response", "result", "tool_output"):
+        val = payload.get(k)
+        if not val:
+            continue
+        text = json.dumps(val) if isinstance(val, (dict, list)) else str(val)
+        if ASYNC_LAUNCH_RE.search(text):
+            return True
+    return False
+
+
 def handle_dispatch_return(payload) -> None:
+    if is_async_launch(payload):
+        return
     cfg = load_config(project_dir(payload))
     review = cfg.get("review") or {}
     if review.get("policy") == "never" or not review.get("nudge", True):

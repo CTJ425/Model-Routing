@@ -27,9 +27,12 @@ or generated file.
   write `?`.
 - **Never delete an entry.** Completed work is *moved* from a hot file to the archive
   your caller names, byte for byte: no rewriting, summarising, translating, or
-  reformatting. Verify with `grep -c`: the destination count increases by exactly the
-  number moved, the source count decreases by the same number, and the combined total is
-  unchanged. Surviving entries keep their numbers, because other documents cite them.
+  reformatting. When rolling overflow entries into an archive, run
+  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/roll_records.py` (or `python3 route/scripts/roll_records.py`)
+  to perform the move deterministically with insert-before-delete safety. If performing a move
+  manually, verify with `grep -c`: the destination count increases by exactly the number moved,
+  the source count decreases by the same number, and the combined total is unchanged. Surviving
+  entries keep their numbers, because other documents cite them.
 - You may write only under the project's tracking directory. A PreToolUse guard blocks
   everything else; if you were asked to touch code, report that instead of trying.
 - Do not run `git add`, `git commit`, `git push`, or other version-control mutations. If a
@@ -67,9 +70,10 @@ silent corruption: nothing errors, and the file simply stops being ordered.
 - **Prepend** with `Edit`, `old_string` being the file's header line alone. `Edit` refuses
   to touch a file you have not read, so first re-issue the Read **with a small `limit`**
   (the header is all you need — a bounded read of an archive is allowed, an unbounded one
-  is denied).
+  is denied). Or run `roll_records.py`.
 - **Append** with a Bash heredoc (`cat >> <file> <<'EOF'`) — only when the file is
   genuinely oldest-first.
+- **Never rewrite an archive file whole.** Never replace an entire archive with `Write`.
 
 Reading the hot files is fine — they are small, and keeping them so is the point. Match
 the format of the entries already in the file you write; the project's records are the

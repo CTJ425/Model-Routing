@@ -117,15 +117,24 @@ def test_discovery_nudge_fires_when_scout_enabled_explicitly(project):
 
 # --- review nudge ---
 
-def dispatch_return(project, subagent_type, agent_type=""):
-    return context(run_observe(
-        {"hook_event_name": "PostToolUse", "tool_name": "Agent",
-         "agent_type": agent_type, "session_id": "t1",
-         "tool_input": {"subagent_type": subagent_type}}, project))
+def dispatch_return(project, subagent_type, agent_type="", tool_result=None):
+    payload = {
+        "hook_event_name": "PostToolUse", "tool_name": "Agent",
+        "agent_type": agent_type, "session_id": "t1",
+        "tool_input": {"subagent_type": subagent_type},
+    }
+    if tool_result is not None:
+        payload["tool_result"] = tool_result
+    return context(run_observe(payload, project))
 
 
 def test_builder_return_nudges_about_review(project):
     assert "Step 4 review policy" in dispatch_return(project, "route:builder")
+
+
+def test_builder_async_launch_is_silent(project):
+    assert dispatch_return(project, "route:builder",
+                           tool_result="Async agent launched successfully. Task id: task-1") is None
 
 
 def test_reviewer_return_is_silent(project):
