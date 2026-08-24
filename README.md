@@ -23,9 +23,18 @@ only the standard library.
 
 ## Install
 
+### Inside Claude Code (Session)
+
 ```
 /plugin marketplace add CTJ425/Model-Routing
 /plugin install route@route
+```
+
+### From Terminal (CLI)
+
+```bash
+claude plugin marketplace add CTJ425/Model-Routing
+claude plugin install route@route
 ```
 
 Then, in any target repo:
