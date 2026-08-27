@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model-Routing (route) 系統架構、流程圖、時序圖與 Hook 機制解析</title>
+  <!-- Mermaid.js for Diagrams -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        darkMode: true,
+        background: '#161b22',
+        primaryColor: '#1f6feb',
+        primaryTextColor: '#f0f6fc',
+        primaryBorderColor: '#388bfd',
+        lineColor: '#58a6ff',
+        secondaryColor: '#238636',
+        tertiaryColor: '#21262d',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", Helvetica, Arial, sans-serif'
+      }
+    });
+  </script>
+  <style>
+    :root {
+      --bg-main: #0d1117;
+      --bg-card: #161b22;
+      --bg-card-hover: #1c2128;
+      --bg-subtle: #21262d;
+      --border-color: #30363d;
+      --border-focus: #58a6ff;
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+      --text-dim: #6e7681;
+      
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-yellow: #d29922;
+      --accent-purple: #bc8cff;
+      --accent-red: #f85149;
+      --accent-teal: #39c5cf;
+      
+      --badge-boss: #d29922;
+      --badge-scout: #58a6ff;
+      --badge-builder: #3fb950;
+      --badge-reviewer: #bc8cff;
+      --badge-scribe: #39c5cf;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar Navigation */
+    #sidebar {
+      width: 280px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 24px 16px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #sidebar .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 20px;
+    }
+
+    #sidebar .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #1f6feb, #238636);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    #sidebar .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    #sidebar .brand-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .nav-group {
+      margin-bottom: 20px;
+    }
+
+    .nav-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      padding-left: 8px;
+    }
+
+    .nav-link {
+      display: block;
+      padding: 8px 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .nav-link:hover {
+      background: var(--bg-subtle);
+      color: var(--text-main);
+    }
+
+    .nav-link.active {
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
+    /* Main Content */
+    #content {
+      flex: 1;
+      padding: 40px 48px;
+      max-width: 1200px;
+      overflow-x: hidden;
+    }
+
+    header.doc-header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 28px;
+      margin-bottom: 40px;
+    }
+
+    .tag-pills {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .tag-pill {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+
+    .tag-pill.blue { color: var(--accent-blue); border-color: rgba(88, 166, 255, 0.3); background: rgba(88, 166, 255, 0.08); }
+    .tag-pill.green { color: var(--accent-green); border-color: rgba(63, 185, 80, 0.3); background: rgba(63, 185, 80, 0.08); }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .lead-text {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 900px;
+    }
+
+    section {
+      margin-bottom: 56px;
+      scroll-margin-top: 40px;
+    }
+
+    h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-main);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2 .section-num {
+      color: var(--accent-blue);
+      font-size: 18px;
+    }
+
+    h3 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin: 28px 0 16px 0;
+    }
+
+    p, li {
+      color: #c9d1d9;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+
+    ul, ol {
+      padding-left: 24px;
+      margin-bottom: 16px;
+    }
+
+    /* Cards Grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      margin: 24px 0;
+    }
+
+    .role-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 20px;
+      transition: transform 0.2s, border-color 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .role-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-focus);
+    }
+
+    .role-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+    }
+
+    .role-card.boss::before { background: var(--badge-boss); }
+    .role-card.scout::before { background: var(--badge-scout); }
+    .role-card.builder::before { background: var(--badge-builder); }
+    .role-card.reviewer::before { background: var(--badge-reviewer); }
+    .role-card.scribe::before { background: var(--badge-scribe); }
+
+    .role-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .role-name {
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .role-tier {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .tier-session { background: rgba(210, 153, 34, 0.2); color: var(--badge-boss); }
+    .tier-haiku { background: rgba(88, 166, 255, 0.2); color: var(--badge-scout); }
+    .tier-sonnet { background: rgba(63, 185, 80, 0.2); color: var(--badge-builder); }
+
+    .role-duty {
+      font-size: 13px;
+      color: #c9d1d9;
+      margin-bottom: 14px;
+    }
+
+    .role-forbidden {
+      background: rgba(248, 81, 73, 0.1);
+      border: 1px solid rgba(248, 81, 73, 0.25);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #ff7b72;
+    }
+
+    .role-tools {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Diagram Container */
+    .diagram-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 24px;
+      margin: 24px 0;
+      overflow-x: auto;
+    }
+
+    .diagram-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Callout Boxes */
+    .callout {
+      background: var(--bg-card);
+      border-left: 4px solid var(--accent-blue);
+      border-radius: 0 8px 8px 0;
+      padding: 16px 20px;
+      margin: 20px 0;
+    }
+
+    .callout.warning {
+      border-left-color: var(--accent-yellow);
+      background: rgba(210, 153, 34, 0.08);
+    }
+
+    .callout.danger {
+      border-left-color: var(--accent-red);
+      background: rgba(248, 81, 73, 0.08);
+    }
+
+    .callout.success {
+      border-left-color: var(--accent-green);
+      background: rgba(63, 185, 80, 0.08);
+    }
+
+    .callout-title {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .callout.warning .callout-title { color: var(--accent-yellow); }
+    .callout.danger .callout-title { color: var(--accent-red); }
+    .callout.success .callout-title { color: var(--accent-green); }
+
+    /* Tables */
+    .table-wrapper {
+      overflow-x: auto;
+      margin: 20px 0;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: var(--bg-subtle);
+      color: var(--text-main);
+      padding: 12px 16px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      color: #c9d1d9;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Code Blocks */
+    pre, code {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    code {
+      background: rgba(110, 118, 129, 0.2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #e6edf3;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+
+    pre {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 16px 0;
+    }
+
+    /* Step Timeline */
+    .steps-timeline {
+      position: relative;
+      padding-left: 32px;
+      margin: 28px 0;
+    }
+
+    .steps-timeline::before {
+      content: '';
+      position: absolute;
+      left: 12px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: var(--border-color);
+    }
+
+    .step-item {
+      position: relative;
+      margin-bottom: 32px;
+    }
+
+    .step-dot {
+      position: absolute;
+      left: -32px;
+      top: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 2px solid var(--accent-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-blue);
+    }
+
+    .step-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px 20px;
+    }
+
+    .step-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .step-actor {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--bg-subtle);
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      body { flex-direction: column; }
+      #sidebar { width: 100%; height: auto; position: static; }
+      #content { padding: 24px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR NAVIGATION -->
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-icon">⇄</div>
+      <div>
+        <div class="brand-title">Model-Routing</div>
+        <div class="brand-sub">Claude Code `route` Plugin</div>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">導覽目錄</div>
+      <a href="#overview" class="nav-link">1. 核心理念與架構總覽</a>
+      <a href="#roles" class="nav-link">2. 五大角色分工矩陣</a>
+      <a href="#flowchart" class="nav-link">3. 完整路由流程圖</a>
+      <a href="#sequence" class="nav-link">4. 核心時序圖 (Sequence)</a>
+      <a href="#lifecycle-steps" class="nav-link">5. 7 階段生命週期詳解</a>
+      <a href="#hooks-guard" class="nav-link">6. Hook 機制與守衛系統</a>
+      <a href="#risk-triggers" class="nav-link">7. 7 大風險審查觸發器</a>
+      <a href="#config-tools" class="nav-link">8. 專案配置與指令工具</a>
+    </div>
+
+    <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-dim);">
+      Repo: <code>CTJ425/Model-Routing</code><br>
+      Version: 2.0 (Generalized Spec)
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="content">
+    <header class="doc-header">
+      <div class="tag-pills">
+        <span class="tag-pill blue">Claude Code Plugin</span>
+        <span class="tag-pill green">Tiered Model Routing</span>
+        <span class="tag-pill">Context Cost Optimization</span>
+      </div>
+      <h1>Model-Routing (`route`) 系統架構與機制指南</h1>
+      <p class="lead-text">
+        本指南深入解析 <code>route</code> 插件的模型分流架構、多代理人協同流程、Pre/PostToolUse Hook 守衛機制、審查閉環與記帳稽核系統。
+      </p>
+    </header>
+
+    <!-- SECTION 1: OVERVIEW -->
+    <section id="overview">
+      <h2><span class="section-num">01.</span> 核心理念與架構總覽</h2>
+      
+      <p>
+        在大語言模型 (LLM) 的代理工作流中，成本的大頭並非單次輸出的生成量，而是 <strong>Context Replay（上下文重播懲罰）</strong>：
+      </p>
+
+      <div class="callout warning">
+        <div class="callout-title">⚠️ Context Replay 核心痛點</div>
+        主會話 (Main Thread) 只要讀取了一次大檔案或傾印了幾千行的測試日誌，這些內容就會在該 Session <strong>後續的每一個回合 (Turn)</strong> 不斷被灌入 Context 並被重複計費。因此，讓頂級昂貴模型直接讀取整份代碼庫或撰寫大量模板代碼是極大的浪費。
+      </div>
+
+      <p>
+        <strong><code>route</code> 插件的解決方案：</strong><br>
+        將昂貴的主會話模型 (Boss) 當作「架構師與裁判」，只負責規劃、寫規格契約與裁決；將大範圍閱讀、實作寫入、靜態審查與文檔記帳等機械工作，全權委派給 4 個平價的專屬 Subagent。
+      </p>
+
+      <div class="diagram-container">
+        <div class="diagram-title">📊 分層模型路由拓撲圖 (Tiered Model Routing Topology)</div>
+        <div class="mermaid">
+graph TD
+    subgraph MainThread ["👑 Main Thread (Session Model / 高階昂貴模型)"]
+        Boss["Boss<br/>• 任務分級 (Lanes 0/1/2)<br/>• 撰寫 Spec / Brief<br/>• 編寫 Failing Tests<br/>• 裁決審查與重試控制"]
+    end
+
+    subgraph Subagents ["🤖 專屬 Subagents (低費率平價模型)"]
+        Scout["route:scout (Haiku)<br/>• 唯讀探索代碼<br/>• 壓縮長 Log / Trace<br/>• 上限 40 行摘要"]
+        Builder["route:builder (Sonnet)<br/>• 依 Spec/Brief 實作<br/>• 執行 Verify 指令<br/>• 禁改測試與文檔"]
+        Reviewer["route:reviewer (Sonnet)<br/>• 比對 Diff 與 Spec<br/>• 審查 7 大風險特徵<br/>• 只報問題不提解法"]
+        Scribe["route:scribe (Haiku)<br/>• 謄寫 Task/Bug 成果<br/>• 安全原子滾動歸檔<br/>• 嚴格時間戳防偽"]
+    end
+
+    Boss -->|派工 (探索未明模組)| Scout
+    Scout -->|回傳 40 行拓撲地圖| Boss
+    Boss -->|派工 (提供 Brief/Spec)| Builder
+    Builder -->|回傳 Verify 結果與檔案清單| Boss
+    Boss -->|派工 (外部 Diff + 合約)| Reviewer
+    Reviewer -->|回傳 Verdict: PASS / FAIL / RISK| Boss
+    Boss -->|派工 (傳遞結構化事實)| Scribe
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: ROLES -->
+    <section id="roles">
+      <h2><span class="section-num">02.</span> 五大角色分工矩陣</h2>
+
+      <div class="cards-grid">
+        <!-- Boss -->
+        <div class="role-card boss">
+          <div class="role-header">
+            <span class="role-name">👑 Boss</span>
+            <span class="role-tier tier-session">Session Tier</span>
+          </div>
+          <div class="role-duty">
+            <strong>職責：</strong>任務分級、撰寫 Inline Brief 與 Spec、編寫失敗測試、裁決審查回饋。
+          </div>
+          <div class="role-forbidden">
+            ⛔ <strong>嚴禁：</strong>直接撰寫生產程式碼、直接編輯追蹤文檔（除非 Lane 0 極小改動）。
+          </div>
+          <div class="role-tools">🛠️ 具備工具：全工具（受 Hook 政策規範）</div>
+        </div>
+
+        <!-- Scout -->
+        <div class="role-card scout">
+          <div class="role-header">
+            <span class="role-name">🔍 scout</span>
+            <span class="role-tier tier-haiku">Haiku</span>
+          </div>
+          <div class="role-duty">
+            <strong>職責：</strong>代碼地圖繪製 (Map mode)、日誌與堆疊壓縮 (Compress mode)。
+          </div>
+          <div class="role-forbidden">
+            ⛔ <strong>嚴禁：</strong>撰寫任何檔案、執行任何 Bash 指令、輸出超過 40 行。
+          </div>
+          <div class="role-tools">🛠️ 具備工具：<code>Read</code>, <code>Glob</code>, <code>Grep</code></div>
+        </div>
+
+        <!-- Builder -->
+        <div class="role-card builder">
+          <div class="role-header">
+            <span class="role-name">🔨 builder</span>
+            <span class="role-tier tier-sonnet">Sonnet</span>
+          </div>
+          <div class="role-duty">
+            <strong>職責：</strong>嚴格依據 <code>Files</code> 清單實作代碼、逐字執行 <code>Verify</code> 命令驗證。
+          </div>
+          <div class="role-forbidden">
+            ⛔ <strong>嚴禁：</strong>修改測試檔案、修改 Spec/文檔、添加未要求的架構或錯誤處理。
+          </div>
+          <div class="role-tools">🛠️ 具備工具：<code>Read</code>, <code>Glob</code>, <code>Grep</code>, <code>Write</code>, <code>Edit</code>, <code>Bash</code></div>
+        </div>
+
+        <!-- Reviewer -->
+        <div class="role-card reviewer">
+          <div class="role-header">
+            <span class="role-name">🕵️ reviewer</span>
+            <span class="role-tier tier-sonnet">Sonnet</span>
+          </div>
+          <div class="role-duty">
+            <strong>職責：</strong>比對 Builder Diff 與 Spec，檢查 7 大風險觸發器，回傳 PASS/FAIL/RISK。
+          </div>
+          <div class="role-forbidden">
+            ⛔ <strong>嚴禁：</strong>修復任何代碼、提出修復建議方案、執行 Bash。
+          </div>
+          <div class="role-tools">🛠️ 具備工具：<code>Read</code>, <code>Glob</code>, <code>Grep</code></div>
+        </div>
+
+        <!-- Scribe -->
+        <div class="role-card scribe">
+          <div class="role-header">
+            <span class="role-name">✍️ scribe</span>
+            <span class="role-tier tier-haiku">Haiku</span>
+          </div>
+          <div class="role-duty">
+            <strong>職責：</strong>機械化謄寫進度與成果至 <code>docs/agent/</code> 追蹤文檔、安全原子滾動歸檔。
+          </div>
+          <div class="role-forbidden">
+            ⛔ <strong>嚴禁：</strong>撰寫生產代碼、推測數值、偽造未來時間戳。
+          </div>
+          <div class="role-tools">🛠️ 具備工具：<code>Read</code>, <code>Glob</code>, <code>Grep</code>, <code>Write</code>, <code>Edit</code>, <code>Bash</code> (限 <code>cat >></code>)</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3: FLOWCHART -->
+    <section id="flowchart">
+      <h2><span class="section-num">03.</span> 完整路由流程圖 (Model-Routing Flowchart)</h2>
+      
+      <p>
+        下方流程圖展示了從接收需求、通道分類 (Lane 0/1/2)、分派代理人、到審查判定與裁決修復迴圈的完整生命週期：
+      </p>
+
+      <div class="diagram-container">
+        <div class="diagram-title">🔄 路由迴圈狀態機與決策流程 (State Machine & Decision Flowchart)</div>
+        <div class="mermaid">
+flowchart TD
+    Start([任務啟動: Feature / Bug]) --> Step0[Step 0: Lane 分級與冷啟動門檻評估]
+    
+    Step0 -->|Lane 0: 極小單行修改/版本號更新| Lane0[Boss 直接就地修改 & 執行驗證]
+    Lane0 --> ScribeDirect[Boss/Scribe 寫入單行記錄]
+    ScribeDirect --> EndNode([任務圓滿完成])
+    
+    Step0 -->|Lane 1 / 2 且目標區域未探索| Step1[Step 1: 分派 route:scout 繪製代碼地圖]
+    Step0 -->|Lane 1 / 2 且目標區域已知| Step2
+    Step1 -->|回傳約 40 行結構化地圖| Step2
+    
+    Step2{Step 2: 制定規格契約}
+    Step2 -->|Lane 1: Bounded 任務| Brief[Boss 撰寫 5 段式 Inline Brief]
+    Step2 -->|Lane 2: 高風險/複雜任務| Spec[Boss 撰寫 Spec 檔案 + 失敗測試]
+    
+    Brief --> Step3[Step 3: 分派 route:builder 執行實作]
+    Spec --> Step3
+    
+    Step3 --> Step3Run[Builder 實作代碼並執行 Verify 驗證命令]
+    Step3Run --> Step4Check{Step 4: 審查政策檢查 review.policy}
+    
+    Step4Check -->|policy=never 或 無風險觸發| Step6Check
+    Step4Check -->|policy=always 或 觸發 7 大風險之一| Step4[Step 4: 分派 route:reviewer 審查 Diff]
+    
+    Step4 -->|回傳 Findings: PASS / FAIL / RISK| Step5{Step 5: Boss 裁決 Adjudicate}
+    
+    Step5 -->|PASS / PASS with RISK| Step6Check{是否啟用 bookkeeping?}
+    Step5 -->|FAIL 第一次| Fix1[Boss 撰寫定位修復指令: File + Line + Post-condition]
+    Fix1 --> ResumeBuilder[透過 SendMessage 恢復現有 Builder 續做<br/>免除冷啟動開銷]
+    ResumeBuilder --> Step3Run
+    
+    Step5 -->|FAIL 第二次| Fix2[80% 機率為 Spec 瑕疵: Boss 修正 Spec/Brief]
+    Fix2 --> RestartBuild[重啟 Builder 實作]
+    RestartBuild --> Step3Run
+    
+    Step5 -->|FAIL 第三次| Escalate[終止自動迴圈，升級交由人類工程師介入]
+    Escalate --> EndNode
+    
+    Step6Check -->|bookkeeping=false| EndNode
+    Step6Check -->|bookkeeping=true| Step6[Step 6: 分派 route:scribe 機械記帳]
+    Step6 --> Step6Run[Scribe 寫入 TASK/BUG/PROGRESS 並歸檔]
+    Step6Run --> EndNode
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 4: SEQUENCE -->
+    <section id="sequence">
+      <h2><span class="section-num">04.</span> 核心時序圖 (Sequence Diagrams)</h2>
+
+      <h3>4.1 標準任務生命週期時序圖 (Lane 1/2 Standard Flow)</h3>
+      <p>展示使用者請求後，Boss 與各 Subagent、Hook 守衛系統之間的互動時序：</p>
+
+      <div class="diagram-container">
+        <div class="diagram-title">⏱️ 端到端標準時序圖 (End-to-End Sequence)</div>
+        <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as 使用者 (User)
+    participant Boss as Boss (Main Session)
+    participant Guard as routing_guard.py (PreToolUse)
+    participant Observe as routing_observe.py (Observability)
+    participant Scout as route:scout (Haiku)
+    participant Builder as route:builder (Sonnet)
+    participant Reviewer as route:reviewer (Sonnet)
+    participant Scribe as route:scribe (Haiku)
+
+    User->>Boss: 發送開發需求 / 修復任務
+    Note over Boss: Step 0: 評估 Lane 分級與冷啟動門檻
+
+    alt 目標代碼未探索
+        Boss->>Guard: PreToolUse (Agent: route:scout)
+        Guard-->>Boss: permissionDecision: allow
+        Boss->>Scout: 分派代碼探索 (特定問題)
+        Observe->>Observe: 記錄 SubagentStart 至 dispatch.jsonl
+        Scout->>Scout: 唯讀掃描檔案 (Read/Grep/Glob)
+        Scout-->>Boss: 回傳 ~40 行代碼拓撲摘要
+        Observe->>Observe: 記錄 SubagentStop
+    end
+
+    Note over Boss: Step 2: 擬定 Brief / Spec<br/>(含 Files 清單與 Verify 命令)
+
+    Boss->>Guard: PreToolUse (Agent: route:builder)
+    Guard-->>Boss: permissionDecision: allow
+    Boss->>Builder: 分派實作 (給予 Brief/Spec)
+    Observe->>Observe: 記錄 SubagentStart
+
+    Builder->>Guard: PreToolUse (Write/Edit 程式碼)
+    Note over Guard: 檢查目標路徑是否在 paths.prod<br/>嚴格禁止修改測試與文檔
+    Guard-->>Builder: allow
+    Builder->>Builder: 執行 Verify 指令驗證
+    Builder-->>Boss: 回傳 REPORT (STATUS: DONE, VERIFY: PASS)
+    Observe->>Observe: 記錄 SubagentStop
+    Observe-->>Boss: PostToolUse Nudge (提醒 Step 4 審查政策)
+
+    opt 觸發 7 大風險 或 policy=always
+        Boss->>Boss: 產生 git diff 寫至外部暫存路徑
+        Boss->>Guard: PreToolUse (Agent: route:reviewer)
+        Guard-->>Boss: allow
+        Boss->>Reviewer: 分派審查 (Diff路徑 + Brief + Builder報告)
+        Observe->>Observe: 記錄 SubagentStart
+        Reviewer->>Reviewer: 靜態審查 (比對 Spec 一致性與 7大風險)
+        Reviewer-->>Boss: 回傳 Verdict: PASS
+        Observe->>Observe: 記錄 SubagentStop
+    end
+
+    Note over Boss: Step 5: 裁決審查結果 (PASS)
+
+    opt 啟用 Bookkeeping
+        Boss->>Guard: PreToolUse (Agent: route:scribe)
+        Guard-->>Boss: allow
+        Boss->>Scribe: 分派記帳 (傳遞結果數據、時區)
+        Observe->>Observe: 記錄 SubagentStart
+        Scribe->>Guard: PreToolUse (Write docs/agent/*.md)
+        Guard-->>Scribe: allow (檢查路徑限 docs/，驗證時間戳)
+        Scribe->>Scribe: 謄寫追蹤文檔並滾動歸檔
+        Scribe-->>Boss: 回傳 RECORDED / MOVED 報告
+        Observe->>Observe: 記錄 SubagentStop
+    end
+
+    Boss-->>User: 回報任務完成與結果摘要
+        </div>
+      </div>
+
+      <h3>4.2 審查失敗與 Builder 恢復迴圈時序圖 (Resume Loop)</h3>
+      <p>當 Reviewer 發現缺陷時，Boss 不重新開局分派，而是精準下達指令恢復既有 Builder：</p>
+
+      <div class="diagram-container">
+        <div class="diagram-title">🔁 裁決修復與 Builder 恢復時序圖 (Adjudication & Resume Sequence)</div>
+        <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Boss as Boss (Main Session)
+    participant Reviewer as route:reviewer (Sonnet)
+    participant Builder as route:builder (既有實體)
+
+    Reviewer-->>Boss: VERDICT: FAIL (發現邊界情況未處理或合約違規)
+    Note over Boss: Step 5: 裁決 (第 1 次失敗)<br/>將 Reviewer findings 轉化為精確修復指令<br/>(檔名 + 行號 + 預期後置條件)
+
+    Note over Boss,Builder: ⚡ 核心優化：透過 SendMessage 恢復現有 Builder<br/>跳過 System Prompt 與工具定義注入，避免冷啟動費用！
+    Boss->>Builder: SendMessage (指定修復指令)
+    Builder->>Builder: 執行微調修改
+    Builder->>Builder: 重新執行 Verify 命令
+    Builder-->>Boss: 回傳更新 REPORT (VERIFY: PASS)
+
+    Note over Boss: Boss 親自重新執行 Verify 命令雙重驗證
+    Boss->>Boss: 驗證通過，進入 Step 6 記帳
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 5: LIFECYCLE STEPS -->
+    <section id="lifecycle-steps">
+      <h2><span class="section-num">05.</span> 7 階段生命週期詳解 (Step 0 ~ Step 6)</h2>
+
+      <div class="steps-timeline">
+        <!-- Step 0 -->
+        <div class="step-item">
+          <div class="step-dot">0</div>
+          <div class="step-content">
+            <div class="step-header">
+              <span class="step-title">Step 0: Lane 分級與冷啟動門檻評估</span>
+              <span class="step-actor">👑 Boss</span>
+            </div>
+            <p>評估任務所需的推理深度、錯誤代價與主觀判斷：</p>
+            <ul>
+              <li><strong>Lane 0 (Inline Surgical)</strong>：極小手術式修改（如錯字、版本號更新、單行修復）。由 Boss 在主會話就地修改並驗證，免除 Subagent 冷啟動門檻費用。</li>
+              <li><strong>Lane 1 (Bounded Feature/Fix - 預設)</strong>：已知模組內的邊界明確任務。Boss 在 Prompt 撰寫 5 段式 Inline Brief。</li>
+              <li><strong>Lane 2 (Elevated Risk)</strong>：未知原因 Bug、狀態/DB/認證變更、跨模組變更。Boss 建立正式 Spec 文檔並預先編寫 Failing Tests。</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Step 1 -->
+        <div class="step-item">
+          <div class="step-dot">1</div>
+          <div class="step-content">
+            <div class="step-header">
+              <span class="step-title">Step 1: 代碼拓撲繪製 (Codebase Mapping)</span>
+              <span class="step-actor">🔍 scout (Haiku)</span>
+            </div>
+            <p>僅在目標代碼區域未被探索時分派。Scout 進行唯讀掃描，回傳限制在 <strong>40 行以內</strong> 的結構化摘要 (<code>ENTRY</code>, <code>DEFINES</code>, <code>CALLERS</code>, <code>STATE</code>, <code>TESTS</code>, <code>GAPS</code>)，大幅節省主會話 Token。</p>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="step-item">
+          <div class="step-dot">2</div>
+          <div class="step-content">
+            <div class="step-header">
+              <span class="step-title">Step 2: 規格契約制定 (Spec / Brief Authoring)</span>
+              <span class="step-actor">👑 Boss</span>
+            </div>
+            <p>由高階模型擬定嚴格的任務邊界契約：</p>
+            <pre><code>Task: &lt;任務 ID 與簡述&gt;
+Contract: &lt;輸入、輸出、錯誤處理、不變性承諾&gt;
+Files: src/...   &lt;- 窮舉允許修改的檔案清單，其餘一律不准動
+Verify: &lt;精確的驗證指令&gt;
+Non-goals: &lt;明確禁止的額外行為&gt;</code></pre>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step-item">
+          <div class="step-dot">3</div>
+          <div class="step-content">
+            <div class="step-header">
+              <span class="step-title">Step 3: 程式碼實作 (Implementation & Build)</span>
+              <span class="step-actor">🔨 builder (Sonnet)</span>
+            </div>
+            <p>Builder 僅能修改 <code>Files</code> 清單中的檔案，禁止修改任何測試檔案、Spec 或追蹤文檔。實作完成後逐字執行 <code>Verify</code> 驗證指令並回報結構化報告。</p>
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="step-item">
+          <div class="step-dot">4</div>
+          <div class="step-content">
+            <div class="step-header">
+              <span class="step-title">Step 4: 靜態審查與風險檢查 (Review & Risk Triggers)</span>
+              <span class="step-actor">🕵️ reviewer (Sonnet)</span>
+            </div>
+            <p>依據 <code>review.policy</code> 政策執行。Boss 將 <code>git diff</code> 寫入專案外的暫存檔傳遞給 Reviewer（比全檔閱讀節省約 6.8x Token）。Reviewer 依據 7 大風險觸發器進行判定，只報問題不提解法。</p>
+          </div>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="step-item">
+          <div class="step-dot">5</div>
+          <div class="step-content">
+            <div class="step-header">
+              <span class="step-title">Step 5: 裁決與修復閉環 (Adjudication Loops)</span>
+              <span class="step-actor">👑 Boss</span>
+            </div>
+            <ul>
+              <li><strong>PASS</strong>：進入 Step 6。</li>
+              <li><strong>FAIL (第 1 次)</strong>：Boss 撰寫精確修復指令，透過 <code>SendMessage</code> 恢復 (Resume) 既有 Builder 續做。</li>
+              <li><strong>FAIL (第 2 次)</strong>：約 80% 機率為規格瑕疵，Boss 修正 Spec 後重新開局。</li>
+              <li><strong>FAIL (第 3 次)</strong>：終止自動迴圈，升級交由人類工程師介入。</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Step 6 -->
+        <div class="step-item">
+          <div class="step-dot">6</div>
+          <div class="step-content">
+            <div class="step-header">
+              <span class="step-title">Step 6: 機械記帳與歸檔 (Bookkeeping & Audit)</span>
+              <span class="step-actor">✍️ scribe (Haiku)</span>
+            </div>
+            <p>將結果客觀謄寫至 <code>docs/agent/</code> (TASK.md, BUG_FIX.md, PROGRESS.md)。嚴格遵守<strong>「先寫入目標歸檔、驗證後再刪除來源 (Insert-before-delete)」</strong> 原則。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 6: HOOKS -->
+    <section id="hooks-guard">
+      <h2><span class="section-num">06.</span> Hook 機制與安全防護系統 (Hook System Deep Dive)</h2>
+
+      <p>
+        <code>route</code> 插件不依賴提示詞自律，而是透過 Claude Code 的 Hook 系統實現<strong>真正的邊界強制隔離與可觀測性</strong>：
+      </p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Hook 事件</th>
+              <th>觸發時機 / Matcher</th>
+              <th>執行腳本</th>
+              <th>核心防護與觀測目標</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>SessionStart</code></td>
+              <td>會話剛啟動時</td>
+              <td><code>routing_observe.py</code></td>
+              <td>注入 <code>[routing]</code> Brief 提示詞、啟用角色清單與當前未完成 Task/Bug 統計。</td>
+            </tr>
+            <tr>
+              <td><code>PreToolUse</code></td>
+              <td><code>Write|Edit|NotebookEdit</code></td>
+              <td><code>routing_guard.py</code></td>
+              <td>阻擋跨角色越權寫入（如 Builder 寫測試、Scribe 寫代碼、Boss 寫代碼彈出確認）。校驗時間戳防偽。</td>
+            </tr>
+            <tr>
+              <td><code>PreToolUse</code></td>
+              <td><code>Read</code></td>
+              <td><code>routing_guard.py</code></td>
+              <td>阻擋主會話讀取超過閥值 (預設 32KB) 的大檔案，防止 Context 污染；阻擋 Scribe 無邊界全讀 archive。</td>
+            </tr>
+            <tr>
+              <td><code>PreToolUse</code></td>
+              <td><code>Agent|Task</code></td>
+              <td><code>routing_guard.py</code></td>
+              <td>直接拒絕 (<code>deny</code>) 已停用角色；攔截昂貴的內建探索代理 (<code>explore</code>)，建議改用 <code>scout</code>。</td>
+            </tr>
+            <tr>
+              <td><code>PreToolUse</code></td>
+              <td><code>Bash</code></td>
+              <td><code>routing_guard.py</code></td>
+              <td>正則過濾引號，啟發式偵測寫入行為；阻擋唯讀角色與 Scribe 執行 VCS (git commit) 變更。</td>
+            </tr>
+            <tr>
+              <td><code>PostToolUse</code></td>
+              <td><code>Read|Grep|Glob</code></td>
+              <td><code>routing_observe.py</code></td>
+              <td>累計主會話探索次數，超過門檻 (預設 12 次) 發出警示提醒分派 <code>route:scout</code>。</td>
+            </tr>
+            <tr>
+              <td><code>PostToolUse</code></td>
+              <td><code>Agent|Task</code></td>
+              <td><code>routing_observe.py</code></td>
+              <td>當 <code>builder</code> 完成返回時，自動注入 Step 4 審查政策提醒 (<code>review_nudge</code>)。</td>
+            </tr>
+            <tr>
+              <td><code>SubagentStart / Stop</code></td>
+              <td>Subagent 啟動/停止</td>
+              <td><code>routing_observe.py</code></td>
+              <td>將分派事實寫入 <code>.claude/routing/dispatch.jsonl</code> 供 <code>/route:audit</code> 審計。</td>
+            </tr>
+            <tr>
+              <td><code>SessionEnd</code></td>
+              <td>會話結束時</td>
+              <td><code>routing_observe.py</code></td>
+              <td>清理當前 Session 在 <code>.claude/routing/state/</code> 的計數器暫存檔。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout success">
+        <div class="callout-title">🛡️ Fail-Open 容錯設計哲學</div>
+        所有的 Guard 守衛與 Observability 腳本皆採用 <strong>Fail-Open</strong> 原則：若遇到惡意/畸形 Payload、解析失敗或 Python 直譯器異常，腳本一律安靜退出 (<code>sys.exit(0)</code>)，絕不阻塞或中斷使用者的開發 Session。
+      </div>
+
+      <div class="diagram-container">
+        <div class="diagram-title">🛡️ PreToolUse 守衛決策流程圖 (routing_guard.py Decision Tree)</div>
+        <div class="mermaid">
+flowchart TD
+    PreTool[PreToolUse 攔截工具呼叫] --> CheckTool{判定 Tool 名稱}
+
+    CheckTool -->|Read| CheckRead{讀取目標檢查}
+    CheckRead -->|Boss 讀取 > 32KB 無 limit| AskRead[回應 ask: 提醒 Context 重播成本，建議用 scout]
+    CheckRead -->|Scribe 全量讀取 archive| DenyArchive[回應 deny: 歸檔文檔過大，必須使用 limit 錨定]
+    CheckRead -->|其餘正常讀取| Allow[放行 Allow]
+
+    CheckTool -->|Agent / Task| CheckAgent{分派檢查}
+    CheckAgent -->|分派已停用之角色| DenyDisabled[回應 deny: 該角色在 config 中被禁用]
+    CheckAgent -->|Boss 分派 explore/general-purpose| AskDiscovery[回應 ask: 內建代理以最高費率計費，建議改用 scout]
+    CheckAgent -->|合規分派| Allow
+
+    CheckTool -->|Write / Edit| CheckWrite{寫入權限矩陣}
+    CheckWrite -->|Boss 寫 prod 或 record| AskBoss[回應 ask/deny: 依據 guard.mainSeverity 攔截]
+    CheckWrite -->|Builder 寫 test/doc/spec/record| DenyBuilder[回應 deny: Builder 僅限寫生產代碼]
+    CheckWrite -->|Scribe 寫入 docs/ 以外| DenyScribe[回應 deny: Scribe 僅限寫入 docs/]
+    CheckWrite -->|寫入 record 含未來時間戳| DenyTime[回應 deny: 時間戳不可超前當前時區時間]
+    CheckWrite -->|唯讀角色 scout/reviewer 嘗試寫入| DenyRO[回應 deny: 唯讀角色禁止寫入]
+    CheckWrite -->|合規路徑寫入| Allow
+
+    CheckTool -->|Bash| CheckBash{Bash 寫入偵測}
+    CheckBash -->|偵測到重定向/寫入/刪除指令| CheckBashRole{檢查角色}
+    CheckBashRole -->|scout / reviewer| DenyBashRO[回應 deny: 唯讀角色無 Bash 寫入權限]
+    CheckBashRole -->|Scribe 執行 git commit/push| DenyVCS[回應 deny: Scribe 禁止修改 VCS 狀態]
+    CheckBashRole -->|Scribe 執行白名單 cat >> docs/...| Allow
+    CheckBashRole -->|Builder 執行疑似寫入| AskBuilder[回應 ask: 要求人工確認]
+    CheckBash -->|純讀取/測試指令| Allow
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 7: RISK TRIGGERS -->
+    <section id="risk-triggers">
+      <h2><span class="section-num">07.</span> 7 大風險審查觸發器 (Risk Triggers)</h2>
+
+      <p>
+        在預設的 <code>review.policy: "risk"</code> 模式下，只要任務命中以下 7 大風險觸發器之一，Boss <strong>必須分派 <code>route:reviewer</code></strong> 進行獨立審查：
+      </p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>觸發器 ID (Trigger ID)</th>
+              <th>中文定義與審查條件</th>
+              <th>典型場景與風險說明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>no_red_green</code></td>
+              <td>缺乏「修改前失敗、修改後通過」的測試覆蓋</td>
+              <td>沒有任何測試能在修改前捕捉該行為。單純全綠的測試套件不能證明新改動有效。</td>
+            </tr>
+            <tr>
+              <td><code>persistent_state</code></td>
+              <td>涉及跨進程生命週期的持久化狀態變更</td>
+              <td>資料庫 Migration、檔案系統讀寫、Redis 快取格式、訊息佇列 Schema 變更。</td>
+            </tr>
+            <tr>
+              <td><code>authorization</code></td>
+              <td>涉及權限控制與身分驗證決策</td>
+              <td>JWT Token 檢查、Session 驗證、ACL 規則、API 金鑰校驗。</td>
+            </tr>
+            <tr>
+              <td><code>boundary</code></td>
+              <td>涉及外部系統依賴之介面邊界</td>
+              <td>公開 API 規格、Wire Format、CLI 命令列參數、對外 Public 函式簽名。</td>
+            </tr>
+            <tr>
+              <td><code>silent_calculation</code></td>
+              <td>計算錯誤不會拋出例外，只會默默產生錯誤數值</td>
+              <td>財務損益計算、匯率折算、統計報表、稅率加總。</td>
+            </tr>
+            <tr>
+              <td><code>control_flow</code></td>
+              <td>變更控制流程、錯誤處理、重試機制、超時或並發</td>
+              <td>非同步 Promise 鏈、錯誤捕獲分支、Worker 執行緒調度、網路重試邏輯。</td>
+            </tr>
+            <tr>
+              <td><code>builder_blocker</code></td>
+              <td>Builder 於實作報告中主動提及阻礙</td>
+              <td>Builder 在 <code>BLOCKERS</code> 區塊回報了規格衝突或預期外的環境問題。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SECTION 8: CONFIG & TOOLS -->
+    <section id="config-tools">
+      <h2><span class="section-num">08.</span> 專案配置與指令工具</h2>
+
+      <h3>8.1 專案設定檔 (<code>.claude/route.config.json</code>)</h3>
+      <pre><code>{
+  "version": 2,
+  "paths": {
+    "prod": ["src/"],
+    "test": ["**/tests/**", "**/*_test.py", "**/*.test.ts"],
+    "docs": "docs/agent",
+    "specs": "docs/agent/specs"
+  },
+  "models": {
+    "scout": "haiku",
+    "builder": "sonnet",
+    "reviewer": "sonnet",
+    "scribe": "haiku"
+  },
+  "roles": {
+    "scout": { "enabled": true },
+    "builder": { "enabled": true },
+    "reviewer": { "enabled": true },
+    "scribe": { "enabled": true }
+  },
+  "bookkeeping": {
+    "enabled": true,
+    "timezone": "Asia/Taipei",
+    "records": {
+      "tasks":    { "hot": "TASK.md",     "archive": "TASK_ARCHIVE.md" },
+      "bugs":     { "hot": "BUG_FIX.md",  "archive": "FIXED_BUG.md" },
+      "progress": { "hot": "PROGRESS.md", "archive": "PROGRESS_ARCHIVE.md", "keep": 2 }
+    }
+  },
+  "review": {
+    "policy": "risk",
+    "nudge": true
+  },
+  "guard": {
+    "mainSeverity": "ask",
+    "readKB": 32,
+    "scoutAt": 12,
+    "bashWriteDetection": true
+  }
+}</code></pre>
+
+      <h3>8.2 輔助 Slash 指令與腳本清單</h3>
+      <div class="cards-grid">
+        <div class="role-card">
+          <div class="role-header">
+            <span class="role-name"><code>/route:doctor</code></span>
+          </div>
+          <p><strong>環境自我診斷：</strong>檢查 <code>python3</code> 直譯器路徑、Hook 腳本存在性、Config 解析與路徑匹配（唯讀診斷，不變更專案）。</p>
+        </div>
+
+        <div class="role-card">
+          <div class="role-header">
+            <span class="role-name"><code>/route:audit</code></span>
+          </div>
+          <p><strong>費用與 Token 審計：</strong>分析 Session 內各模型的 Token 消耗與花費金額，精確拆分 Main 與各 Subagent 的開銷。</p>
+        </div>
+
+        <div class="role-card">
+          <div class="role-header">
+            <span class="role-name"><code>/route:delta</code></span>
+          </div>
+          <p><strong>分派效益分析：</strong>評估每一次 Subagent 分派是否真正為主會話淨節省了 Token（排除冷啟動開銷）。</p>
+        </div>
+
+        <div class="role-card">
+          <div class="role-header">
+            <span class="role-name"><code>/route:config</code></span>
+          </div>
+          <p><strong>即時配置調整：</strong>檢視或切換各代理人角色的啟用狀態 (<code>enabled</code>) 與模型層級 (<code>models.&lt;role&gt;</code>)。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      <div>Model-Routing (`route`) Plugin Architecture Guide</div>
+      <div>繁體中文版 • generated for CTJ425/Model-Routing</div>
+    </footer>
+  </main>
+
+  <script>
+    // Simple Active Link Spy on Scroll
+    window.addEventListener('scroll', () => {
+      const sections = document.querySelectorAll('section');
+      const navLinks = document.querySelectorAll('.nav-link');
+      let current = '';
+
+      sections.forEach(section => {
+        const sectionTop = section.offsetTop;
+        if (pageYOffset >= sectionTop - 60) {
+          current = section.getAttribute('id');
+        }
+      });
+
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === `#${current}`) {
+          link.classList.add('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
