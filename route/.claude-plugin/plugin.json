@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "route",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "A model-routing loop for Claude Code: the main thread plans, writes specs, and adjudicates; scout (haiku) maps the codebase and compresses logs; builder (sonnet) implements; reviewer (sonnet) checks risk work; scribe (haiku) records outcomes. Role boundaries are enforced by PreToolUse hooks, not prompt etiquette. Per-role model tiers are configurable per project via /route:config.",
   "author": {
     "name": "zrchen",

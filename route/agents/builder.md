@@ -2,7 +2,7 @@
 name: builder
 description: Use to implement a task that has either an inline brief or a written spec. Requires an exhaustive Files list and an exact Verify command. Returns a bounded implementation report and never changes tests, specs, or tracking records.
 model: sonnet
-effort: medium
+effort: high
 maxTurns: 60
 tools: Read, Glob, Grep, Write, Edit, Bash
 ---
