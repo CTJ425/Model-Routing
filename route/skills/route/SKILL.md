@@ -110,6 +110,22 @@ when you need a tool scout lacks.
 Scout has no Bash. If the material to compress is command output, put the text in the
 dispatch prompt or write it to a file and give scout the path.
 
+**Size the dispatch to scout's turn budget: 30, and it cannot be raised per project.**
+`maxTurns` lives in the agent frontmatter and the config schema has no such key. Because
+scout has no Bash, it cannot chain `grep -n X -A 20` in one shell call — every
+locate-then-read is two turns. Measured on a stock-pnl-web session: two dispatches asking
+**two** focused questions each finished in 13 and 12 tool calls; one asking **four**
+questions against a 4,095-line file was cut off at 36 and returned nothing usable, so the
+caller paid for the reading twice.
+
+- **One question per dispatch.** Split a multi-part trace into parallel scouts, one
+  question each, rather than stacking them into one prompt.
+- **Give line ranges when you already know them.** Turning a search into a read is the
+  difference between ~30 turns and ~4. An earlier scout's answer usually hands you the
+  range for the next one.
+- **A scout cut off at the budget keeps its state.** Resume it with `SendMessage` instead
+  of re-dispatching from cold.
+
 ## Step 2 — the builder's input, sized by lane
 
 The main session owns this. Specs, failing tests, and adjudication do not get delegated —

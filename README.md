@@ -67,6 +67,7 @@ The model-routing loop operates across 7 distinct steps with automated role boun
    - **Lane 2 (Elevated Risk)**: Complex bugs, state/DB changes, auth, API boundaries. Boss drafts a full spec file with failing tests.
 2. **Step 1 — Codebase Mapping (`scout` | Haiku default)**:
    - Dispatched only when the target area is unmapped. Performs read-only scans and returns a concise ~40-line structural summary.
+   - Budget: `maxTurns: 30`, not settable per project. Ask **one** question per dispatch and pass line ranges when known; a prompt stacking several questions against a large file exhausts the budget and returns nothing.
 3. **Step 2 — Spec / Brief Authoring (`Boss` | Session Model)**:
    - High-tier model writes task contract, exhaustive `Files` list, verify command, and non-goals. Boss never writes production code.
 4. **Step 3 — Implementation & Build (`builder` | Sonnet default)**:
