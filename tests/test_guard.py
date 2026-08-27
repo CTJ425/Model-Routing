@@ -175,7 +175,7 @@ def test_read_reason_drops_scout_when_disabled(project):
     ("route:scout", "cat > src/a.ts", "deny"),
     ("route:scout", "grep -n foo src/", None),
     ("route:reviewer", "rm -rf build", "deny"),
-    ("route:builder", "sed -i s/a/b/ x", "ask"),
+    ("route:builder", "sed -i s/a/b/ x", "deny"),
     ("route:builder", "npm test", None),
     ("route:builder", "npm test > /dev/null", None),
     ("main", "rm -rf build", None),          # main is not policed on Bash
@@ -322,30 +322,37 @@ def test_env_main_severity_overrides_config(project):
 #
 # scribe.md mandates `cat >> <archive> <<'EOF'` for appends (an archive is too large to
 # Read, and a guard denies that Read outright). handle_bash asked on every scribe write
-# regardless of target, so the agent's documented happy path always needed a human — and
-# in a headless run, where nobody can answer, it failed outright.
+# regardless of target, so the agent's documented happy path always needed a human.
+#
+# That "ask" was assumed to fail closed in a headless run. It does not. Under an
+# auto-approving permission mode an "ask" a subagent cannot surface resolves to ALLOW, so
+# the out-of-scope branch was advisory only: a 2026-08-27 stock-pnl-web session had scribe
+# hit the Edit deny on sources/src/version.ts, reason that "the guard only affects the
+# Write/Edit tools", and complete the same write with `sed -i`. Out-of-scope Bash writes
+# now deny (0.8.0); the in-scope append below is still the allowance that makes the
+# documented happy path work without a human.
 
 @pytest.mark.parametrize("command,want", [
     ("cat >> docs/agent/TASK.md", None),                    # the documented append
-    ("cat >> docs/agent/archive/2026.md <<'EOF'", "ask"),   # opener with no body or
+    ("cat >> docs/agent/archive/2026.md <<'EOF'", "deny"),   # opener with no body or
                                                             # terminator is not a runnable
                                                             # heredoc — see the block below
-    ("cat > docs/agent/TASK.md", "ask"),                   # truncation is never implicit
+    ("cat > docs/agent/TASK.md", "deny"),                   # truncation is never implicit
     ("cat >> ./docs/agent/TASK.md", None),                  # dotted relative path
-    ("cat >> src/a.ts", "ask"),                             # plainly outside
-    ("cat >> docs/agent/../../src/a.ts", "ask"),            # traversal escapes the docs dir
-    ("cat >> /tmp/elsewhere.md", "ask"),                    # absolute, outside the project
-    ("cat >> docs/agent/TASK.md; cat >> src/a.ts", "ask"),  # one target outside is enough
-    ("rm -rf docs/agent/TASK.md", "ask"),                   # destructive verb, not a redirect
-    ("mv docs/agent/a.md docs/agent/b.md", "ask"),          # a move is not a redirect either
+    ("cat >> src/a.ts", "deny"),                             # plainly outside
+    ("cat >> docs/agent/../../src/a.ts", "deny"),            # traversal escapes the docs dir
+    ("cat >> /tmp/elsewhere.md", "deny"),                    # absolute, outside the project
+    ("cat >> docs/agent/TASK.md; cat >> src/a.ts", "deny"),  # one target outside is enough
+    ("rm -rf docs/agent/TASK.md", "deny"),                   # destructive verb, not a redirect
+    ("mv docs/agent/a.md docs/agent/b.md", "deny"),          # a move is not a redirect either
 ])
 def test_scribe_bash_redirect_scoped_to_docs(command, want, project):
     assert decision(bash("route:scribe", command, project)) == want
 
 
-def test_scribe_bash_redirect_asks_when_target_is_unresolvable(project):
+def test_scribe_bash_redirect_denies_when_target_is_unresolvable(project):
     """Fail closed: a target we cannot resolve is not evidence that it is in scope."""
-    assert decision(bash("route:scribe", 'cat >> "$OUT"', project)) == "ask"
+    assert decision(bash("route:scribe", 'cat >> "$OUT"', project)) == "deny"
 
 
 def test_docs_scope_follows_config(project):
@@ -354,12 +361,12 @@ def test_docs_scope_follows_config(project):
     cfg["paths"]["docs"] = "records"
     write_config(project, cfg)
     assert decision(bash("route:scribe", "cat >> records/TASK.md", project)) is None
-    assert decision(bash("route:scribe", "cat >> docs/agent/TASK.md", project)) == "ask"
+    assert decision(bash("route:scribe", "cat >> docs/agent/TASK.md", project)) == "deny"
 
 
 def test_only_scribe_gets_the_docs_allowance(project):
     """builder still asks: the tracking directory is scribe's, not everyone's."""
-    assert decision(bash("route:builder", "cat >> docs/agent/TASK.md", project)) == "ask"
+    assert decision(bash("route:builder", "cat >> docs/agent/TASK.md", project)) == "deny"
     assert decision(bash("route:scout", "cat >> docs/agent/TASK.md", project)) == "deny"
 
 
@@ -395,7 +402,7 @@ def test_timestamp_uses_the_configured_timezone(project):
 # A denylist over shell strings is unwinnable: every one of these reached a silent allow
 # through an earlier "not destructive AND target in scope" formulation. The allowance now
 # matches only the exact append shape scribe.md prescribes — `cat >>` one literal path,
-# with an optional heredoc — so truncation and anything unusual fall through to ask.
+# with an optional heredoc — so truncation and anything unusual fall through to deny.
 
 @pytest.mark.parametrize("command", [
     r"cat >> docs/agent/\.\./\.\./etc/passwd",       # backslash escapes normpath cannot see
@@ -412,15 +419,15 @@ def test_timestamp_uses_the_configured_timezone(project):
     "echo hi > docs/agent/a.md > docs/agent/b.md",   # two redirects
 ])
 def test_scribe_bash_allowance_is_fail_closed(command, project):
-    assert decision(bash("route:scribe", command, project)) == "ask"
+    assert decision(bash("route:scribe", command, project)) == "deny"
 
 
-def test_scribe_bash_redirect_through_symlink_asks(project):
+def test_scribe_bash_redirect_through_symlink_denies(project):
     """normpath cannot see a symlink; the target must be resolved for real."""
     outside = project / "outside.md"
     outside.write_text("x\n")
     (project / "docs" / "agent" / "link.md").symlink_to(outside)
-    assert decision(bash("route:scribe", "cat >> docs/agent/link.md", project)) == "ask"
+    assert decision(bash("route:scribe", "cat >> docs/agent/link.md", project)) == "deny"
 
 
 def test_scribe_bash_allowance_survives_odd_docs_config(project):
@@ -429,7 +436,7 @@ def test_scribe_bash_allowance_survives_odd_docs_config(project):
         cfg = json.loads(json.dumps(BASE_CONFIG))
         cfg["paths"]["docs"] = docs
         write_config(project, cfg)
-        assert decision(bash("route:scribe", "cat >> src/a.ts", project)) == "ask"
+        assert decision(bash("route:scribe", "cat >> src/a.ts", project)) == "deny"
 
 
 # --- the heredoc append, as a shell actually receives it ---
@@ -453,19 +460,19 @@ HEREDOC_TAB = "cat >> docs/agent/archive/2026.md <<-'EOF'\n\tbody\n\tEOF"
     (HEREDOC_OK + "\n", None),                             # trailing newline is harmless
     # An UNQUOTED delimiter leaves the body subject to expansion, so `$(...)` in it is
     # executed by the shell. Never allowed.
-    ("cat >> docs/agent/x.md <<EOF\n$(rm -rf /tmp/x)\nEOF", "ask"),
-    ("cat >> docs/agent/x.md <<EOF\nplain body\nEOF", "ask"),
+    ("cat >> docs/agent/x.md <<EOF\n$(rm -rf /tmp/x)\nEOF", "deny"),
+    ("cat >> docs/agent/x.md <<EOF\nplain body\nEOF", "deny"),
     # Anything after the terminator is a second command riding along.
-    ("cat >> docs/agent/x.md <<'EOF'\nbody\nEOF\nrm -rf /tmp/x", "ask"),
+    ("cat >> docs/agent/x.md <<'EOF'\nbody\nEOF\nrm -rf /tmp/x", "deny"),
     # No terminator: the body is unbounded, so its extent cannot be reasoned about.
-    ("cat >> docs/agent/x.md <<'EOF'\nbody", "ask"),
+    ("cat >> docs/agent/x.md <<'EOF'\nbody", "deny"),
     # A terminator that only looks like one.
-    ("cat >> docs/agent/x.md <<'EOF'\nbody\nEOFX", "ask"),
-    ("cat >> docs/agent/x.md <<'EOF'\nbody\n EOF", "ask"),  # leading space, not <<-
+    ("cat >> docs/agent/x.md <<'EOF'\nbody\nEOFX", "deny"),
+    ("cat >> docs/agent/x.md <<'EOF'\nbody\n EOF", "deny"),  # leading space, not <<-
     # The target still has to be in scope, heredoc or not.
-    ("cat >> src/a.ts <<'EOF'\nbody\nEOF", "ask"),
+    ("cat >> src/a.ts <<'EOF'\nbody\nEOF", "deny"),
     # A newline may not smuggle a second command in when there is no heredoc at all.
-    ("cat >> docs/agent/x.md\nrm -rf /tmp/x", "ask"),
+    ("cat >> docs/agent/x.md\nrm -rf /tmp/x", "deny"),
 ])
 def test_scribe_heredoc_append(command, want, project):
     assert decision(bash("route:scribe", command, project)) == want
@@ -488,11 +495,11 @@ def test_quoted_angle_bracket_is_not_a_write(command, project):
 
 
 @pytest.mark.parametrize("command,want", [
-    ("echo done > result.txt", "ask"),          # a real redirect, unquoted
-    ("cat > src/a.ts", "ask"),
-    ("sed -i 's/a/b/' src/a.ts", "ask"),        # -i is outside the quoted span
-    ("rm -rf build", "ask"),                    # verb match, no redirect involved
-    ("echo 'a > b' > out.txt", "ask"),          # quoted decoy plus a real redirect
+    ("echo done > result.txt", "deny"),          # a real redirect, unquoted
+    ("cat > src/a.ts", "deny"),
+    ("sed -i 's/a/b/' src/a.ts", "deny"),        # -i is outside the quoted span
+    ("rm -rf build", "deny"),                    # verb match, no redirect involved
+    ("echo 'a > b' > out.txt", "deny"),          # quoted decoy plus a real redirect
 ])
 def test_real_writes_survive_quote_stripping(command, want, project):
     assert decision(bash("route:builder", command, project)) == want
@@ -505,13 +512,13 @@ def test_quote_stripping_does_not_weaken_read_only_roles(project):
 
 def test_unterminated_quote_is_not_treated_as_a_quoted_span(project):
     """Fail closed: an unbalanced quote must not swallow a real redirect."""
-    assert decision(bash("route:builder", "echo it's fine > out.txt", project)) == "ask"
+    assert decision(bash("route:builder", "echo it's fine > out.txt", project)) == "deny"
 
 
 def test_scribe_in_scope_redirect_still_resolves_after_quote_stripping(project):
     """Quote stripping is for detection only; scribe's target resolution sees the raw text."""
     assert decision(bash("route:scribe", "cat >> docs/agent/TASK.md", project)) is None
-    assert decision(bash("route:scribe", 'cat >> "$OUT"', project)) == "ask"
+    assert decision(bash("route:scribe", 'cat >> "$OUT"', project)) == "deny"
 
 
 @pytest.mark.parametrize("command", [
@@ -522,4 +529,4 @@ def test_scribe_in_scope_redirect_still_resolves_after_quote_stripping(project):
 def test_escaped_quote_does_not_hide_a_redirect(command, project):
     """A backslash-escaped quote is not a span delimiter. Treating it as one blanks a real
     redirect out of the scanned text, which is the one direction this must never fail in."""
-    assert decision(bash("route:builder", command, project)) == "ask"
+    assert decision(bash("route:builder", command, project)) == "deny"

@@ -378,7 +378,7 @@ def handle_bash(role, tool_input, project, cfg) -> None:
         "builder": "outside the allowed production paths; the spec's Files list is checked by the agent",
         "scribe": "outside %s/" % cfg["paths"]["docs"],
     }.get(role, "here")
-    respond("ask", "[routing/%s] " % role + BASH_REASON.format(role=role, scope=scope))
+    respond("deny", "[routing/%s] " % role + BASH_REASON.format(role=role, scope=scope))
 
 
 def handle_write(role, tool_input, project, cfg) -> None:

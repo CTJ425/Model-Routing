@@ -143,9 +143,12 @@ placeholder rates — check them against the official pricing page before quotin
 
 - **Writes issued through Bash.** The guard's shell-command detection is a regex
   heuristic and it will never be complete. The real enforcement is the `tools:` allowlist:
-  `scout` and `reviewer` have no Bash at all. For `builder` a suspected write raises an
-  `ask`, because a shell command's target cannot be resolved reliably. Scribe's exact
-  `cat >> <literal-path>` append inside `paths.docs` is allowed; other suspected writes ask.
+  `scout` and `reviewer` have no Bash at all. For `builder` and `scribe` a suspected
+  out-of-scope write is **denied** (0.8.0; it used to `ask`). An `ask` was assumed to fail
+  closed when no human is present, and it does not — under an auto-approving permission
+  mode an `ask` a subagent cannot surface resolves to ALLOW, which made the whole branch
+  advisory. Scribe's exact `cat >> <literal-path>` append inside `paths.docs` is still
+  allowed; that allowance is what keeps the documented append working without a human.
   Balanced quoted spans are removed before the command is scanned, so `grep 'a -> b'` and
   `awk '$3 > 10'` are not mistaken for redirects — the cost of that is the mirror case: a
   write hidden entirely inside a quoted string, such as `bash -c 'echo x > f'`, is not

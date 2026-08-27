@@ -325,7 +325,7 @@ flowchart TD
     CheckBashRole -->|scout / reviewer| DenyBashRO[回應 deny: 唯讀角色禁止寫入]
     CheckBashRole -->|Scribe 執行 VCS git commit/push| DenyVCS[回應 deny: Scribe 禁止修改版本控制狀態]
     CheckBashRole -->|Scribe 執行合規 cat >> docs/...| AllowBashScribe[放行]
-    CheckBashRole -->|Builder 執行疑似寫入| AskBashBuilder[回應 ask: 要求使用者確認]
+    CheckBashRole -->|Builder / Scribe 執行範圍外寫入| DenyBashWrite[回應 deny: 出角色的 Bash 寫入]
     CheckBash -->|純讀取/驗證指令| AllowBash[放行]
 ```
 

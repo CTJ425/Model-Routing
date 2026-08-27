@@ -4,6 +4,17 @@ Older progress entries, prepended from `PROGRESS.md` so newest-first order holds
 
 ---
 
+## 📅 Log: 2026-08-24 09:14:26 CST (route the loop's own overhead down)
+
+- **Changed**: README.md, route/agents/builder.md, route/agents/reviewer.md, route/skills/route/SKILL.md
+- **Verify**: PASS — `python3 -m pytest tests/ -q` — 143 passed, 0 failed
+- **Tests**: 143 passed, 0 failed
+- **Lint**: NOT RUN — project defines no lint command
+- **Review**: FAIL on first round with one BLOCKER — new diff-first rule contradicted existing rule forbidding PASS without reading every changed file in full; defect was in brief, not implementation. Merged into one coverage rule and re-verified. Builder.md change adjudicated by main session reading directly rather than second reviewer dispatch.
+- **Accepted risk**: none outstanding
+
+---
+
 ## 📅 Log: 2026-08-23 19:18:07 CST (add /route:doctor self-check)
 
 - **Changed**: route/scripts/routing_doctor.py, route/commands/doctor.md, tests/test_doctor.py, README.md
