@@ -1,185 +1,199 @@
 # route
 
-A Claude Code plugin marketplace with one plugin, `route`: a model-routing loop that
-keeps the expensive model out of mechanical work. The Boss runs in your main session;
-four subagents do everything else.
+`route` 是一個專為 Claude Code 設計的模型路由 (Model-Routing) 插件。其核心目標是**將昂貴的高階模型從機械式的執行工作中解放出來**：主會話（Boss）專注於高階規劃與決策，四個專屬子代理人（Subagents）則分工處理地圖繪製、代碼實作、風險審查與日誌謄寫。
 
-| Role | Where it runs | Default model | Owns | Must never |
+| 角色 (Role) | 執行位置 | 預設模型與 Effort | 負責範疇 (Owns) | 絕對禁止 (Must Never) |
 |---|---|---|---|---|
-| **Boss** | the main thread | your session model | routing, sequencing, specs, adjudication | write production code or a tracking record |
-| **scout** | subagent | haiku | mapping the codebase, compressing logs/stack traces | write anything, or run commands |
-| **builder** | subagent | sonnet | implementing an existing spec | touch tests, specs, or tracking docs |
-| **reviewer** | subagent | sonnet | reviewing a builder's diff against its spec | fix anything, propose a fix, or run commands |
-| **scribe** | subagent | haiku | recording outcomes into the tracking docs | write production code |
+| **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 路由分級、順序排定、規格/簡報撰寫、結果裁決 | 撰寫生產程式碼、直接編輯追蹤記錄 |
+| **scout** | 子代理人 (Subagent) | `haiku` (low effort, 30 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
+| **builder** | 子代理人 (Subagent) | `sonnet` (high effort, 60 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
+| **reviewer** | 子代理人 (Subagent) | `sonnet` (high effort, 40 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
+| **scribe** | 子代理人 (Subagent) | `haiku` (low effort) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
 
-Role boundaries are enforced by `PreToolUse` hooks where the path and role are
-classifiable. The hook cannot inspect an inline brief's per-task `Files` list, Bash is
-best-effort for roles that have Bash, and all hooks fail open on malformed input.
+角色權限邊界透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
 
-## Requirements
+---
 
-Python 3.8 or newer, with `python3` on `PATH`. No third-party packages — the hooks import
-only the standard library.
+## 系統需求
 
-## Install
+- Python 3.8 或更高版本，且 `python3` 必須在 `PATH` 中。
+- **零外部套件依賴** — 插件的 Hooks 僅使用 Python 標準函式庫。
 
-### Inside Claude Code (Session)
+---
+
+## 安裝方式
+
+### 在 Claude Code 會話內
 
 ```
 /plugin marketplace add CTJ425/Model-Routing
 /plugin install route@route
 ```
 
-### From Terminal (CLI)
+### 在終端機 (CLI)
 
 ```bash
 claude plugin marketplace add CTJ425/Model-Routing
 claude plugin install route@route
 ```
 
-Then, in any target repo:
+安裝完成後，在任何目標專案目錄下執行：
 
 ```
-/route:init      # ask a few questions, write .claude/route.config.json
-/route:config    # view or change which roles are on and which model each one uses
+/route:init      # 透過互動問答建立 .claude/route.config.json 配置檔
+/route:config    # 檢視或動態調整各角色開關、模型等級、審查政策與防護門檻
 ```
 
-## Architecture & Routing Sequence
+---
+
+## 系統架構與路由生命週期
 
 ![route Architecture](docs/architecture.svg)
 
-### Routing Lifecycle & Timing Steps
+### 7 階段路由生命週期 (Step 0 ~ Step 6)
 
-The model-routing loop operates across 7 distinct steps with automated role boundary enforcement and adjudication loops:
+模型路由迴圈涵蓋 7 個精確階段，具備自動角色邊界防護與重試裁決迴圈：
 
 ```
-[0. Classify Lane] ──► [1. Scout (Map)] ──► [2. Boss (Spec/Brief)] ──► [3. Builder (Code)]
-                                                                               │
-[6. Scribe (Record)] ◄── [5. Boss (Adjudicate)] ◄── [4. Reviewer (Risk Check)] ◄┘
-         ▲                        │
-         └──────── (Lane 0) ──────┴──► [Adjudication Loops: Fix / Re-spec / Escalate]
+[0. 任務分級 Lane] ──► [1. Scout (地圖探索)] ──► [2. Boss (規格擬定)] ──► [3. Builder (代碼實作)]
+                                                                                │
+[6. Scribe (成果記帳)] ◄── [5. Boss (結果裁決)] ◄── [4. Reviewer (風險審查)] ◄┘
+         ▲                          │
+         └──────── (Lane 0) ────────┴──► [裁決迴圈：定位修復 / 修正規格 / 升級人工]
 ```
 
-1. **Step 0 — Classify Lane & Dispatch Floor Check (`Boss`)**:
-   - Evaluates risk, inference requirements, and checks if task size exceeds subagent cold-start overhead.
-   - **Lane 0 (Inline Surgical)**: Single-line fixes/version bumps below dispatch floor. Boss edits directly, verifies, and records inline.
-   - **Lane 1 (Bounded Feature/Fix)**: Standard changes inside known modules. Boss drafts an inline brief.
-   - **Lane 2 (Elevated Risk)**: Complex bugs, state/DB changes, auth, API boundaries. Boss drafts a full spec file with failing tests.
-2. **Step 1 — Codebase Mapping (`scout` | Haiku default)**:
-   - Dispatched only when the target area is unmapped. Performs read-only scans and returns a concise ~40-line structural summary.
-   - Budget: `maxTurns: 30`, not settable per project. Ask **one** question per dispatch and pass line ranges when known; a prompt stacking several questions against a large file exhausts the budget and returns nothing.
-3. **Step 2 — Spec / Brief Authoring (`Boss` | Session Model)**:
-   - High-tier model writes task contract, exhaustive `Files` list, verify command, and non-goals. Boss never writes production code.
-4. **Step 3 — Implementation & Build (`builder` | Sonnet default)**:
-   - Reads spec/brief, implements changes strictly within the specified file list, and runs verification and test commands.
-5. **Step 4 — Review & Trigger Evaluation (`reviewer` | Sonnet default)**:
-   - Triggered based on `review.policy` (`always`, `risk`, `never`). Boss passes the change as a diff written outside the repo, so the reviewer reads the change rather than reconstructing it from whole files. Evaluates against 7 risk triggers (`no_red_green`, `persistent_state`, `authorization`, `boundary`, `silent_calculation`, `control_flow`, `builder_blocker`).
-6. **Step 5 — Adjudication & Feedback Loops (`Boss` | Session Model)**:
-   - **PASS**: Proceeds to Step 6.
-   - **FAIL (1st time)**: Boss writes targeted fix instructions (file + line + post-condition) and resumes the `builder` already dispatched — it still holds the spec, so a fresh dispatch would pay a second cold start for nothing.
-   - **FAIL (2nd time)**: Defect is in the spec (~80% probability). Boss fixes spec and restarts build.
-   - **FAIL (3rd time)**: Halts loop and escalates to the user.
-7. **Step 6 — Bookkeeping & Audit Logging (`scribe` | Haiku default)**:
-   - Appends verified outcome, test counts, lint results, reviewer verdicts, and risks to `docs/agent/PROGRESS.md`, `TASK.md`, and `BUG_FIX.md`.
+1. **Step 0 — 任務分級與分派門檻評估 (`Boss`)**：
+   - 評估任務風險與推論需求，並計算任務規模是否超過子代理人的冷啟動開銷（Cold-start Overhead）。
+   - **Lane 0 (極小就地修改)**：低於分派門檻的單行修復或版本號更新。Boss 直接在主會話中修改、驗證並完成單行記錄。
+   - **Lane 1 (邊界明確的功能/修復)**：已知模組內的常規修改。Boss 撰寫行內簡報（5 段式 Inline Brief）。
+   - **Lane 2 (高風險/跨模組變更)**：複雜缺陷、狀態/資料庫變更、認證或 API 邊界。Boss 撰寫完整規格檔案（Spec）並先編寫失敗測試。
 
-Load the `route` skill (or just start a feature or bug — the SessionStart hook reminds
-the session it delegates) and it walks this loop step by step, including when to skip a
-step for a small change.
+2. **Step 1 — 程式碼拓撲繪製 (`scout` | Haiku 預設，Low Effort)**：
+   - 僅在目標區域尚未探索時分派。執行唯讀掃描，回傳約 40 行的結構化地圖摘要。
+   - **預算規範**：預設上限 `maxTurns: 30`（不支援專案自訂覆寫）。每次分派請給予**單一明確問題**並在已知時提供行號範圍；若在單次提示中堆疊多個跨大檔案的問題，將耗盡 30 回合預算而無法回傳可用資訊。若預算不足，Scout 會遵循優雅降級協議，以 `NOT ANSWERED:` 明列未完部分，呼叫端可透過 `SendMessage` 恢復會話續問。
 
-## Per-project configuration
+3. **Step 2 — 規格與簡報撰寫 (`Boss` | Session 模型)**：
+   - 高階模型撰寫任務契約、完整 `Files` 異動檔案清單、精確的 `Verify` 驗證指令與 `Non-goals`（非目標）。Boss 絕對不直接編寫生產代碼。
 
-Each project gets its own `.claude/route.config.json`. Every key is optional; the hooks
-deep-merge it over their defaults, and `schema/route.config.schema.json` documents the
-full shape.
+4. **Step 3 — 程式碼實作 (`builder` | Sonnet 預設，High Effort)**：
+   - 讀取 Spec/Brief，嚴格在指定的 `Files` 清單內實作變更，並照字面（Verbatim）原樣執行驗證指令與測試套件。
+
+5. **Step 4 — 審查與風險檢查 (`reviewer` | Sonnet 預設，High Effort)**：
+   - 依據 `review.policy`（`always`、`risk` 或 `never`）觸發。Boss 以外部 Diff 形式提供變更內容，讓審查者直接閱讀 Diff 差異而非重新讀取全量檔案。
+   - 評估 7 大風險觸發器（`no_red_green`、`persistent_state`、`authorization`、`boundary`、`silent_calculation`、`control_flow`、`builder_blocker`）以及 5 項常態檢查（Standing Checks）。只回報問題清單（`BLOCKER` / `RISK`），不提出具體修復方案。
+
+6. **Step 5 — 裁決與反饋迴圈 (`Boss` | Session 模型)**：
+   - **PASS**：直接推進至 Step 6。
+   - **FAIL (第 1 次)**：Boss 撰寫精確定位修復指令（檔案 + 行號 + 後置條件），並透過 `SendMessage` 恢復先前已分派的 `builder` 繼續修復（保留先前的上下文，避免重複支付冷啟動開銷）。
+   - **FAIL (第 2 次)**：約 80% 機率為規格本身存在瑕疵。Boss 修正 Spec/Brief 後重啟實作。
+   - **FAIL (第 3 次)**：終止自動化迴圈，升級交由人工工程師介入。
+
+7. **Step 6 — 成果記帳與審計存檔 (`scribe` | Haiku 預設，Low Effort)**：
+   - 將已驗證的成果、測試統計、Lint 結果、審查結論與殘留風險以機械化方式追加至 `docs/agent/PROGRESS.md`、`TASK.md` 與 `BUG_FIX.md`，並依設定自動歸檔。
+
+> 💡 載入 `route` Skill（或直接開啟新功能/修復任務 — `SessionStart` Hook 會主動提示委派流程），系統將逐步引導您走過此迴圈。
+
+---
+
+## 專案獨立配置 (.claude/route.config.json)
+
+每個專案均可在根目錄下建立專屬的 `.claude/route.config.json`。所有設定鍵值皆為選填，Hooks 會將專案設定與內建預設值進行深度合併（Deep-merge），完整 Schema 規格定義於 `route/schema/route.config.schema.json`。
 
 ```json
 {
   "version": 2,
-  "paths": { "prod": ["src/"] },
-  "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
-  "roles": { "scout": { "enabled": true }, "builder": { "enabled": true },
-             "reviewer": { "enabled": true }, "scribe": { "enabled": true } },
-  "bookkeeping": { "enabled": true, "timezone": "UTC" },
-  "review": { "policy": "risk" }
+  "paths": {
+    "prod": ["src/"],
+    "test": ["tests/", "**/*.test.ts"],
+    "docs": "docs/agent",
+    "specs": "docs/agent/specs"
+  },
+  "models": {
+    "scout": "haiku",
+    "builder": "sonnet",
+    "reviewer": "sonnet",
+    "scribe": "haiku"
+  },
+  "roles": {
+    "scout": { "enabled": true },
+    "builder": { "enabled": true },
+    "reviewer": { "enabled": true },
+    "scribe": { "enabled": true }
+  },
+  "bookkeeping": {
+    "enabled": true,
+    "timezone": "Asia/Taipei"
+  },
+  "review": {
+    "policy": "risk"
+  },
+  "guard": {
+    "mainSeverity": "ask",
+    "readKB": 64,
+    "scoutAt": 2,
+    "bashWriteDetection": true
+  }
 }
 ```
 
-- `paths.prod` — repo-relative prefixes and globs the guard treats as production code.
-- `models.<role>` — overrides that role's agent-file default for this project only,
-  passed as a per-dispatch model override. Editing this file never touches the plugin's
-  own `agents/*.md`, so a plugin update cannot silently undo a project's tuning. Note
-  that the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, if set, outranks it.
-- `roles.<role>.enabled` — set `false` to turn a role off for this project. All four can
-  be turned off, `builder` included. The guard then denies that dispatch outright, the
-  session brief drops the role from its roster, and the main session does that step's
-  work itself. `scout.enabled` is the old name for `roles.scout.enabled` and still works.
-- `bookkeeping.enabled` — set `false` for model routing only: no `scribe`, no tracking
-  docs, no record rules in the guard.
-- `review.policy` — the Boss's review-routing policy: `always`, `risk` (default), or
-  `never`. The PostToolUse nudge makes a required review visible but does not itself block
-  a user or model that ignores it.
-- `review.triggers` — optional IDs replacing the default risk checks:
-  `no_red_green`, `persistent_state`, `authorization`, `boundary`,
-  `silent_calculation`, `control_flow`, and `builder_blocker`.
+### 設定鍵值說明
 
-`/route:init` writes the initial file; `/route:config` edits it.
+- `paths.prod`：生產代碼的相對路徑或 Glob 規則，Guard 會據此界定生產代碼範圍。
+- `paths.test`：測試檔案路徑規則，Guard 會嚴禁 `builder` 擅自修改此範圍。
+- `models.<role>`：針對此專案覆寫該角色的分派模型（支援任何別名或完整模型 ID）。此設定僅作用於分派參數，不會修改插件本體檔案；若環境變數 `CLAUDE_CODE_SUBAGENT_MODEL` 已設定，該環境變數優先度高於此處設定。
+- `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（四個角色均可獨立關閉）。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。
+- `bookkeeping.enabled`：設為 `false` 時僅啟用模型路由功能（不分派 `scribe`、不維護追蹤文檔、Guard 不套用記錄保護規則）。
+- `bookkeeping.timezone`：寫入記錄時間戳時所採用的 IANA 時區（如 `UTC` 或 `Asia/Taipei`）。
+- `review.policy`：審查觸發策略：`always`（每次實作後均審查）、`risk`（預設，僅在觸發風險時審查）、`never`（不審查，以測試作為唯一門檻）。
+- `review.triggers`：自訂風險觸發器清單（`no_red_green`、`persistent_state`、`authorization`、`boundary`、`silent_calculation`、`control_flow`、`builder_blocker`）。
+- `guard.mainSeverity`：當主會話嘗試直接修改生產代碼或追蹤文檔時的防護層級（`ask`、`deny`、`off`）。
+- `guard.readKB`：主會話未指定範圍讀取大檔案的警示上限（KB），超過時要求確認；`0` 為關閉。
+- `guard.scoutAt`：主會話在手動搜尋檔案達到指定次數時，主動提示改用 `scout`；`0` 為關閉。
+- `guard.bashWriteDetection`：是否啟用 Bash 檔案寫入啟發式偵測（預設 `true`）。
 
-## Verifying it actually routed
+> 執行 `/route:init` 可建立初始配置檔；執行 `/route:config` 可檢視與互動式編輯。
+
+---
+
+## 驗證與審計工具
 
 ```
-/route:doctor    # is the plugin live, and is it configured so the roles can work
-/route:audit     # cost per model and per role, main thread and subagents
-/route:delta     # whether each dispatch removed net tokens from main's context
+/route:doctor    # 診斷插件健康狀態：直譯器、Hooks 執行性與配置檔檢查
+/route:audit     # 統計主會話與各 Subagents 的 Token 消耗與花費 (USD)
+/route:delta     # 評估各次分派是否成功減少主會話的 Context 淨負擔
 ```
 
-`/route:doctor` runs first when something looks wrong. It answers the one question the other
-two cannot: whether the hooks are executing at all. It reports only — it repairs nothing.
+- **/route:doctor**：當路由行為異常時的第一道檢查工具。它能驗證 Hooks 是否正常被呼叫並檢查 Python 直譯器狀態（僅做狀態診斷，不自動修改檔案）。
+- **/route:audit** 與 **/route:delta**：直接解析 Claude Code 原生生成的 Transcripts。若發現僅有主模型消耗且無任何 Subagent 紀錄，代表分派未實際生效。USD 費用依據 `route/scripts/pricing.json` 計算（可透過專案設定自訂費率表）。
 
-Both read the transcripts Claude Code already writes. Read the per-role split, not the
-token columns: one model and zero subagent transcripts means nothing was routed, whatever
-the plan said. The USD columns come from `route/scripts/pricing.json`, which ships with
-placeholder rates — check them against the official pricing page before quoting a number.
+---
 
-## What this does NOT enforce
+## 安全邊界與防護限制說明 (What this does NOT enforce)
 
-- **Writes issued through Bash.** The guard's shell-command detection is a regex
-  heuristic and it will never be complete. The real enforcement is the `tools:` allowlist:
-  `scout` and `reviewer` have no Bash at all. For `builder` and `scribe` a suspected
-  out-of-scope write is **denied** (0.8.0; it used to `ask`). An `ask` was assumed to fail
-  closed when no human is present, and it does not — under an auto-approving permission
-  mode an `ask` a subagent cannot surface resolves to ALLOW, which made the whole branch
-  advisory. Scribe's exact `cat >> <literal-path>` append inside `paths.docs` is still
-  allowed; that allowance is what keeps the documented append working without a human.
-  Balanced quoted spans are removed before the command is scanned, so `grep 'a -> b'` and
-  `awk '$3 > 10'` are not mistaken for redirects — the cost of that is the mirror case: a
-  write hidden entirely inside a quoted string, such as `bash -c 'echo x > f'`, is not
-  detected. This guard catches accidents; it is not a sandbox.
-- **Anything outside the project directory.** Paths that resolve outside the repo root
-  are not classified and not policed.
-- **Agents the plugin does not own.** An unrecognised `agent_type` passes every rule
-  untouched; this guard governs the routing roles, not every agent in your repo.
-- **Whether the model actually used its cheap tier.** The hooks record dispatches;
-  `/route:audit` is what checks the bill.
-- **The builder's inline `Files` list.** The guard enforces role-level path categories;
-  the Builder and Reviewer must check the task-specific list.
+- **透過 Bash 執行的檔案寫入**：Guard 對 Shell 指令的偵測基於正規表示式啟發（Regex Heuristics），無法涵蓋 100% 的複雜語法。真正的核心防護在於 `tools` 白名單：`scout` 與 `reviewer` 完全未賦予 Bash 工具；而針對 `builder` 與 `scribe`，任何可疑的超範圍 Bash 寫入在 0.8.0 之後**全面改為直接拒絕（`deny`）**（不再採用 `ask`，以避免自動授權模式下被繞過）。Scribe 在 `paths.docs` 內的精確 `cat >> <path>` 追加寫入依然被安全允許。
+- **專案目錄之外的路徑**：解析結果位於專案根目錄外的路徑不受 Guard 判定與管制。
+- **非插件所屬的自定義 Agent**：未知的 `agent_type` 不會受到此處規則限制；本 Guard 專責管理路由插件所定義的角色。
+- **模型實際計費扣款**：Hooks 僅記錄分派與呼叫；實際費用請使用 `/route:audit` 進行對帳。
+- **Builder 的任務層級 `Files` 清單**：Guard 負責角色層級的路徑類別防護；Task 具體的檔案清單需由 Builder 嚴格自我約束與 Reviewer 進行審查。
 
-Every guard is also fail-open by design: a malformed payload, an unreadable config, or a
-crash in the hook exits silently rather than blocking your session.
+### Fail-open 設計與 Python 環境依賴
 
-That has one consequence worth knowing. The hooks are invoked as `python3`. If `python3`
-does not resolve on the PATH Claude Code hands to hooks — a Windows box, or a pyenv/conda
-interpreter that is not on it — every hook fails open and the plugin enforces nothing,
-silently. **The `[routing]` brief at session start is the canary:** if you do not see it,
-the hooks are not running, and neither are the guards. `/route:doctor` checks this directly —
-a `FAIL` on `interpreter` or `hooks` means nothing described above is being enforced. Fix the
-interpreter before trusting any of these boundaries.
+所有的 Guard 在設計上皆為 **Fail-open**（當負載格式異常、設定檔損毀或 Hook 發生例外時，皆會安靜放行，絕不阻斷您的開發會話）。
 
-## Language
+這代表一個關鍵前提：Hooks 依賴 `python3` 指令執行。若 Claude Code 傳遞給 Hook 的 `PATH` 中無法解析 `python3`（例如某些 Windows 環境或未加入 PATH 的虛擬環境），所有 Hooks 將會靜默放行而失去防護功能。
 
-Code, identifiers, and commit messages are English. Prose in records and agent reports
-follows `language.artifacts` in the project config. This README is the documented
-exception.
+> ⚠️ **會話啟動時的 `[routing]` 簡報是核心指標（Canary）**：若在 Session 開頭未看見 `[routing]` 簡報，代表 Hooks 尚未運行。可立即執行 `/route:doctor` 進行診斷修復。
 
-## License
+---
 
-MIT — see [LICENSE](LICENSE).
+## 語言政策 (Language)
+
+- 程式碼、識別碼與 Git Commit 訊息維持使用**英文**。
+- 追蹤文檔與 Agent 產生的報告語言遵循配置檔中的 `language.artifacts`（例如 `zh-TW` 或 `en`）。
+- 本 `README.md` 採用繁體中文作為使用者主要參考文件。
+
+---
+
+## 授權條款 (License)
+
+本專案基於 [MIT License](LICENSE) 授權開源。
