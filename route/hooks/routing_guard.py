@@ -14,8 +14,12 @@ Four jobs, selected by tool_name.
   Write|Edit|...    — polices what a role may write, and rejects a future-dated
                       timestamp in a tracking record.
   Bash              — best-effort detection of writes that route around the file
-                      tools. This is a backstop, not a gate: the real enforcement
-                      for a read-only role is not giving it Bash at all.
+                      tools. Where the command's literal write targets can be resolved,
+                      each role gets the same scope through Bash that it gets through
+                      Write/Edit; an unresolvable shape is denied for a role with a
+                      write scope, and allowed for the main session. This is a backstop,
+                      not a gate: the real enforcement for a read-only role is not
+                      giving it Bash at all.
 
 Every hook payload carries `agent_type`, so one script polices both the main session
 and each subagent. Plugin subagents arrive namespaced ("route:builder"), which
@@ -168,10 +172,63 @@ def _scribe_redirect_target(command: str):
         return None
     return mh.group(1)
 
+# Best-effort resolution of the literal paths a shell command writes to. Deliberately
+# narrow, and narrow in one direction only: every shape it cannot account for returns
+# None, which callers read as "unknown", never as "safe". A chain operator, a command
+# substitution, or a second line without a heredoc opener could each hide a target this
+# grammar never sees, so any of them disqualifies the whole command.
+_SHELL_CHAIN_RE = re.compile(r"[|;&`]|\$\(")
+_REDIRECT_TARGET_RE = re.compile(r"(?<![0-9<>])>>?[ \t]*([^\s|;&<>()]+)")
+# A target carrying a variable, a glob, or a brace is not the path that will be written.
+# Resolving it as a literal would classify the wrong path and report the wrong reason.
+_NON_LITERAL_RE = re.compile(r"[$*?~{}\[\]]")
+# Verbs whose operands are paths, and which no file tool can express -- the reason a
+# blanket Bash deny left builder unable to do in-scope work at all.
+_WRITE_VERB_RE = re.compile(
+    r"^(?:sudo[ \t]+)?(?:mkdir|rmdir|touch|rm|mv|cp|ln)\b(.*)$")
+# `sed -i 's/a/b/' path`: the script is a quoted span, so it is already blank by the
+# time the operands are split.
+_INPLACE_EDIT_RE = re.compile(
+    r"^(?:sudo[ \t]+)?(?:sed|perl|ruby)\b(?=.*[ \t]-i)(.*)$")
+
+
+def _write_targets(command: str):
+    """-> the literal paths this command appears to write, or None when the shape cannot
+    be resolved. None means unknown, not safe."""
+    scan = _strip_quoted_spans(command)
+    head, _, body = scan.partition("\n")
+    # A heredoc body is data. A second line with no heredoc opener above it is a second
+    # command, which this single-command grammar does not cover.
+    if body and "<<" not in head:
+        return None
+    if _SHELL_CHAIN_RE.search(head):
+        return None
+    targets = [m.group(1) for m in _REDIRECT_TARGET_RE.finditer(head)]
+    stripped = head.strip()
+    operands = _WRITE_VERB_RE.match(stripped) or _INPLACE_EDIT_RE.match(stripped)
+    if operands:
+        targets += [t for t in operands.group(1).split() if not t.startswith("-")]
+    if any(_NON_LITERAL_RE.search(t) for t in targets):
+        return None
+    return targets or None
+
+
 BASH_REASON = (
     "This Bash command looks like it writes to the filesystem, and `{role}` may not write "
     "{scope}. Writing through Bash routes around the file-tool guard; that is out of role, "
     "not a workaround. Report the blocker instead."
+)
+
+BUILDER_BASH_OUT_OF_SCOPE_REASON = (
+    "This Bash command writes to {targets}, which is not a production path in "
+    "`paths.prod`. Builder's write scope is the same through Bash as through "
+    "`Write`/`Edit`. Report the blocker instead."
+)
+
+BUILDER_BASH_UNRESOLVED_REASON = (
+    "This Bash command writes to the filesystem in a shape this guard cannot resolve to "
+    "a target path, so it cannot be confirmed inside the production paths. Re-issue it as "
+    "one simple command with literal paths, or use `Write`/`Edit`."
 )
 
 REASONS = {
@@ -211,6 +268,15 @@ def respond(decision: str, reason: str) -> None:
         "permissionDecisionReason": reason,
     }}))
     sys.exit(0)
+
+
+def main_severity(cfg) -> str:
+    """-> the decision for a main-session write: 'deny', 'ask', or '' when turned off."""
+    level = (os.environ.get("ROUTING_MAIN")
+             or cfg["guard"].get("mainSeverity") or "ask").lower()
+    if level == "off":
+        return ""
+    return "deny" if level == "deny" else "ask"
 
 
 def classify(rel, cfg) -> str:
@@ -357,10 +423,53 @@ def _scribe_redirect_in_scope(command: str, project: str, cfg: dict) -> bool:
     return target_real == docs_real or target_real.startswith(docs_real + os.sep)
 
 
+def handle_main_bash(command, project, cfg) -> None:
+    """The Write/Edit nudge, applied to the same edit made through the shell.
+
+    Without this the whole `@main` policy is one `sed -i` away from silence, and a
+    session told to prefer Bash for file changes routes around it by construction.
+    Resolution is best-effort, so an unresolved command falls through to allow: a guard
+    that blocks the main session on a parse failure is worse than one that misses a case.
+    """
+    for target in _write_targets(command) or []:
+        rel = rel_path(target, project)
+        if rel is None:
+            continue
+        cls = classify(rel, cfg)
+        if cls in ("prod", "record"):
+            decision = main_severity(cfg)
+            if decision:
+                respond(decision, "[routing/main] " + REASONS[("main", cls)])
+            sys.exit(0)
+    sys.exit(0)
+
+
+def handle_builder_bash(command, project, cfg) -> None:
+    """Builder's Bash scope is its Write/Edit scope: a production path, or anything
+    outside the repository.
+
+    `mkdir`, `mv` and `rm` have no file-tool equivalent, so denying every write-shaped
+    command made in-scope work impossible while reporting it as out of scope. Builder
+    then stopped and reported a blocker, and the caller did the work at its own rate.
+    """
+    targets = _write_targets(command)
+    if targets is None:
+        respond("deny", "[routing/builder] " + BUILDER_BASH_UNRESOLVED_REASON)
+    outside = []
+    for target in targets:
+        rel = rel_path(target, project)
+        if rel is not None and classify(rel, cfg) != "prod":
+            outside.append(rel)
+    if outside:
+        respond("deny", "[routing/builder] " + BUILDER_BASH_OUT_OF_SCOPE_REASON.format(
+            targets=", ".join(sorted(set(outside))[:3])))
+    sys.exit(0)
+
+
 def handle_bash(role, tool_input, project, cfg) -> None:
     if not cfg["guard"].get("bashWriteDetection", True):
         sys.exit(0)
-    if role not in RULES or role == "main":
+    if role not in RULES:
         sys.exit(0)
     command = tool_input.get("command") or ""
     scan_command = _strip_quoted_spans(command)
@@ -369,16 +478,17 @@ def handle_bash(role, tool_input, project, cfg) -> None:
                 "version-control state.")
     if not BASH_WRITE_RE.search(scan_command):
         sys.exit(0)
+    if role == "main":
+        handle_main_bash(command, project, cfg)
     if role in READ_ONLY_ROLES:
         respond("deny", "[routing/%s] " % role + BASH_REASON.format(
             role=role, scope="anything at all — it is read-only"))
+    if role == "builder":
+        handle_builder_bash(command, project, cfg)
     if role == "scribe" and _scribe_redirect_in_scope(command, project, cfg):
         sys.exit(0)
-    scope = {
-        "builder": "outside the allowed production paths; the spec's Files list is checked by the agent",
-        "scribe": "outside %s/" % cfg["paths"]["docs"],
-    }.get(role, "here")
-    respond("deny", "[routing/%s] " % role + BASH_REASON.format(role=role, scope=scope))
+    respond("deny", "[routing/%s] " % role + BASH_REASON.format(
+        role=role, scope="outside %s/" % cfg["paths"]["docs"]))
 
 
 def handle_write(role, tool_input, project, cfg) -> None:
@@ -423,11 +533,9 @@ def handle_write(role, tool_input, project, cfg) -> None:
         sys.exit(0)
 
     if decision == "@main":
-        level = (os.environ.get("ROUTING_MAIN")
-                 or cfg["guard"].get("mainSeverity") or "ask").lower()
-        if level == "off":
+        decision = main_severity(cfg)
+        if not decision:
             sys.exit(0)
-        decision = "deny" if level == "deny" else "ask"
 
     reason = REASONS.get((role, cls)) or (
         "Role `%s` may not write %s files. See the `route` skill." % (role, cls))

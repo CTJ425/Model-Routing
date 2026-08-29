@@ -170,7 +170,8 @@ claude plugin install route@route
 
 ## 安全邊界與防護限制說明 (What this does NOT enforce)
 
-- **透過 Bash 執行的檔案寫入**：Guard 對 Shell 指令的偵測基於正規表示式啟發（Regex Heuristics），無法涵蓋 100% 的複雜語法。真正的核心防護在於 `tools` 白名單：`scout` 與 `reviewer` 完全未賦予 Bash 工具；而針對 `builder` 與 `scribe`，任何可疑的超範圍 Bash 寫入在 0.8.0 之後**全面改為直接拒絕（`deny`）**（不再採用 `ask`，以避免自動授權模式下被繞過）。Scribe 在 `paths.docs` 內的精確 `cat >> <path>` 追加寫入依然被安全允許。
+- **透過 Bash 執行的檔案寫入**：Guard 對 Shell 指令的偵測基於正規表示式啟發（Regex Heuristics），無法涵蓋 100% 的複雜語法。真正的核心防護在於 `tools` 白名單：`scout` 與 `reviewer` 完全未賦予 Bash 工具。針對有寫入範圍的角色，0.9.0 之後 Guard 會解析指令的實際寫入目標，並套用與 `Write`／`Edit` 完全相同的範圍：`builder` 可在 `paths.prod` 內執行 `mkdir`／`mv`／`rm` 等檔案工具無法表達的操作，超出範圍則直接拒絕（`deny`）。無法解析出字面路徑的寫入指令，對有寫入範圍的角色一律拒絕。Scribe 在 `paths.docs` 內的精確 `cat >> <path>` 追加寫入依然被安全允許。
+- **主會話透過 Bash 的寫入**：0.9.0 之後同樣受 `guard.mainSeverity` 管制。在此之前 `sed -i`、heredoc 等 Shell 寫入完全繞過主會話防護——在「優先使用 Bash 編輯檔案」的自動模式下，這等同於靜默關閉 Step 3／Step 6 的分派提示。若指令無法解析出字面路徑，對主會話一律放行（Fail-open：絕不因解析失敗而阻斷主會話）。
 - **專案目錄之外的路徑**：解析結果位於專案根目錄外的路徑不受 Guard 判定與管制。
 - **非插件所屬的自定義 Agent**：未知的 `agent_type` 不會受到此處規則限制；本 Guard 專責管理路由插件所定義的角色。
 - **模型實際計費扣款**：Hooks 僅記錄分派與呼叫；實際費用請使用 `/route:audit` 進行對帳。

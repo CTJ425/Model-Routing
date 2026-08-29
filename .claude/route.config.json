@@ -1,9 +1,21 @@
 {
   "$schema": "./route/schema/route.config.schema.json",
   "version": 2,
-  "paths": { "prod": ["route/"] },
+  "paths": {
+    "prod": ["route/", "README.md", "pytest.ini", ".github/"],
+    "docs": "docs",
+    "specs": "docs/agent/specs"
+  },
   "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
-  "bookkeeping": { "enabled": true, "timezone": "Asia/Taipei" },
+  "bookkeeping": {
+    "enabled": true,
+    "timezone": "Asia/Taipei",
+    "records": {
+      "tasks":    { "hot": "agent/TASK.md",     "archive": "agent/TASK_ARCHIVE.md" },
+      "bugs":     { "hot": "agent/BUG_FIX.md",  "archive": "agent/FIXED_BUG.md" },
+      "progress": { "hot": "agent/PROGRESS.md", "archive": "agent/PROGRESS_ARCHIVE.md", "keep": 2 }
+    }
+  },
   "language": { "artifacts": "en" },
   "review": { "policy": "risk" }
 }

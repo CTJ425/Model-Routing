@@ -33,7 +33,10 @@ Concretely:
 - Do not change any test file. Tests come with the spec. If a test looks
   wrong, stop and report it as a spec conflict. A PreToolUse guard blocks your writes
   to test files, specs, and `docs/`, so a blocked write means you are out of role —
-  report it, do not route around it.
+  report it, do not route around it. The guard applies the same scope to Bash: `mkdir`,
+  `mv` and `rm` inside the production paths are allowed, because no file tool expresses
+  them. A write-shaped command it cannot resolve to a literal path is denied — re-issue
+  that as one simple command with literal paths, or use `Write`/`Edit`.
 - Do not add features, config flags, abstractions, error handling, or logging that the
   spec did not ask for. "It seemed useful" is a spec violation.
 - Do not rename, reformat, or refactor anything you were not asked to change, even

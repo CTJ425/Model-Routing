@@ -25,6 +25,10 @@ wrong cost, and how much subjective judgement is involved.
 State the lane in one line before you act. If you pick Lane 0 for a tracked task,
 record why in the project's progress log.
 
+A Lane 0 edit is still a main-session write to production code, so `guard.mainSeverity`
+applies to it — through `Write`/`Edit` and through the shell alike. Confirming that prompt
+is how a Lane 0 call gets recorded; routing around it with `sed -i` is not.
+
 ## Step 0.25 — weigh the job against the dispatch floor
 
 Every dispatch pays a cold start: the subagent's system prompt, tool definitions and
@@ -124,7 +128,10 @@ caller paid for the reading twice.
   difference between ~30 turns and ~4. An earlier scout's answer usually hands you the
   range for the next one.
 - **A scout cut off at the budget keeps its state.** Resume it with `SendMessage` instead
-  of re-dispatching from cold.
+  of re-dispatching from cold. A scout that stopped itself hands you a `NOT ANSWERED:` line
+  to resume against; one that was cut hard returns nothing at all, so resume it with the
+  same question plus any line ranges you now know. If a second resume also returns nothing,
+  the question is too broad — split it. Do not resume a third time.
 
 ## Step 2 — the builder's input, sized by lane
 
@@ -159,6 +166,12 @@ writes the code itself, still against the Step 2 input and the same Verify comma
 Otherwise dispatch `route:builder` with **only** its Step 2 input: the Lane 1 brief, or the Lane 2 spec
 path plus test path. Never paste a spec file's contents — builder reads the file. Do not
 add advice or context; anything extra you say competes with the spec.
+
+Builder's Bash write scope is the same as its `Write`/`Edit` scope: `paths.prod`, or
+anything outside the repository. `mkdir`, `mv` and `rm` inside the production paths are
+allowed, because no file tool expresses them; a write-shaped command the guard cannot
+resolve to a literal path is denied. If builder reports a Bash denial as a blocker, check
+the target against `paths.prod` before assuming the spec is at fault.
 
 Independent tasks may go out as parallel `route:builder` calls only when their `Files` lists
 are disjoint and they do not share generated state. Otherwise dispatch them sequentially;

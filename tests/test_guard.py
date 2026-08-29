@@ -496,12 +496,14 @@ def test_quoted_angle_bracket_is_not_a_write(command, project):
 
 @pytest.mark.parametrize("command,want", [
     ("echo done > result.txt", "deny"),          # a real redirect, unquoted
-    ("cat > src/a.ts", "deny"),
-    ("sed -i 's/a/b/' src/a.ts", "deny"),        # -i is outside the quoted span
+    ("cat > docs/agent/TASK.md", "deny"),
+    ("sed -i 's/a/b/' docs/agent/TASK.md", "deny"),   # -i is outside the quoted span
     ("rm -rf build", "deny"),                    # verb match, no redirect involved
     ("echo 'a > b' > out.txt", "deny"),          # quoted decoy plus a real redirect
 ])
 def test_real_writes_survive_quote_stripping(command, want, project):
+    """Targets here are deliberately outside builder's write scope: the claim under test is
+    that the redirect is still *detected*, not that the path is refused."""
     assert decision(bash("route:builder", command, project)) == want
 
 
@@ -524,9 +526,110 @@ def test_scribe_in_scope_redirect_still_resolves_after_quote_stripping(project):
 @pytest.mark.parametrize("command", [
     r"echo \'a > out.txt\'",       # \' is a literal quote; the '>' between them is live
     r"echo \"a > b\"",
-    r"cat \"x\" > src/a.ts",
+    r"cat \"x\" > docs/agent/TASK.md",
 ])
 def test_escaped_quote_does_not_hide_a_redirect(command, project):
     """A backslash-escaped quote is not a span delimiter. Treating it as one blanks a real
     redirect out of the scanned text, which is the one direction this must never fail in."""
     assert decision(bash("route:builder", command, project)) == "deny"
+
+
+# --- builder's Bash scope is its Write/Edit scope ---
+# `mkdir`, `mv` and `rm` have no file-tool equivalent, so denying every write-shaped
+# command left builder unable to do in-scope work — and told it, wrongly, that the target
+# was out of scope. Builder then stopped and reported a blocker, and the caller redid the
+# work at its own rate.
+
+@pytest.mark.parametrize("command", [
+    "mkdir -p src/newmod",
+    "rm src/dead.ts",
+    "mv src/a.ts src/b.ts",
+    "cp src/a.ts src/b.ts",
+    "sed -i 's/a/b/' src/a.ts",
+    "cat > src/a.ts",
+    "npm test > /tmp/route-guard-out.txt",   # outside the repo: same rule as Write/Edit
+])
+def test_builder_bash_write_inside_prod_is_allowed(command, project):
+    assert decision(bash("route:builder", command, project)) is None
+
+
+@pytest.mark.parametrize("command", [
+    "mkdir -p tests/newdir",
+    "rm docs/agent/TASK.md",
+    "mv src/a.ts docs/agent/a.md",        # one target in scope, one outside: still denied
+    "echo done > result.txt",
+])
+def test_builder_bash_write_outside_prod_is_denied(command, project):
+    got = bash("route:builder", command, project)
+    assert decision(got) == "deny"
+    assert "paths.prod" in reason(got)
+
+
+@pytest.mark.parametrize("command", [
+    "cat x | tee src/a.ts",               # a pipe can hide a second target
+    "dd of=src/a.ts",                     # operand shape this grammar does not cover
+    "echo a > src/a.ts; rm -rf tests",    # a chain is not one command
+    "echo hi\nrm -rf tests",              # a second line with no heredoc opener above it
+    "cat > $OUT",                         # a variable is not a literal path
+    "mv src/*.ts src/sub/",               # nor is an unexpanded glob
+])
+def test_builder_bash_unresolvable_target_is_denied(command, project):
+    """Resolution fails in one direction only: unknown is denied, never allowed."""
+    got = bash("route:builder", command, project)
+    assert decision(got) == "deny"
+    assert "cannot resolve" in reason(got)
+
+
+# --- the main-session nudge applies through the shell too ---
+# Without this, `guard.mainSeverity` is one `sed -i` away from silence: a session told to
+# prefer Bash for file edits routes around the Step 3 and Step 6 prompts by construction.
+
+@pytest.mark.parametrize("command,want_in_reason", [
+    ("sed -i 's/a/b/' src/a.ts", "production code"),
+    ("cat > src/a.ts", "production code"),
+    ("rm src/a.ts", "production code"),
+    ("mkdir -p src/newmod", "production code"),
+    ("cat > docs/agent/TASK.md <<'EOF'\nx\nEOF", "tracking record"),
+])
+def test_main_bash_write_is_policed(command, want_in_reason, project):
+    got = bash("main", command, project)
+    assert decision(got) == "ask"
+    assert want_in_reason in reason(got)
+
+
+@pytest.mark.parametrize("command", [
+    "rm -rf build",                          # not a policed class
+    "git diff > /tmp/route-guard-diff.txt",  # outside the repo: Step 4 asks for exactly this
+    "npm test",
+    "npm test > /dev/null",
+    "cat x | tee src/a.ts",                  # unresolvable: main falls open, never blocked
+])
+def test_main_bash_falls_open(command, project):
+    assert decision(bash("main", command, project)) is None
+
+
+@pytest.mark.parametrize("level,want", [("deny", "deny"), ("ask", "ask"), ("off", None)])
+def test_main_bash_respects_main_severity_env(level, want, project):
+    got = run_guard({"tool_name": "Bash", "agent_type": "main",
+                     "tool_input": {"command": "rm src/a.ts"}},
+                    project, env_extra={"ROUTING_MAIN": level})
+    assert decision(got) == want
+
+
+def test_main_bash_respects_main_severity_config(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["guard"] = {"mainSeverity": "deny"}
+    write_config(project, cfg)
+    assert decision(bash("main", "rm src/a.ts", project)) == "deny"
+
+
+def test_main_bash_is_silent_when_write_detection_is_off(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["guard"] = {"bashWriteDetection": False}
+    write_config(project, cfg)
+    assert decision(bash("main", "rm src/a.ts", project)) is None
+
+
+def test_quoted_path_is_not_a_main_bash_target(project):
+    """Quote stripping runs before resolution, so a quoted decoy cannot invent a target."""
+    assert decision(bash("main", "echo 'src/a.ts' > /tmp/route-guard-out.txt", project)) is None

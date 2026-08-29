@@ -5,6 +5,7 @@ import pytest
 
 from conftest import BASE_CONFIG, write_config
 from helpers import run_observe
+from _config import normalize_role
 
 
 def context(result):
@@ -283,3 +284,30 @@ def test_rotation_still_happens_when_the_live_file_is_the_bigger_one(project):
                 project, env_extra={"ROUTING_DISPATCH_MAX_BYTES": "100"})
     assert (d / "dispatch.jsonl.1").read_text() == "y" * 5000
     assert "route:builder" in (d / "dispatch.jsonl").read_text()
+
+
+# --- a dispatch row with no role must not read as a main-thread row ---
+
+def test_missing_agent_type_is_recorded_as_unknown(project):
+    """The harness does not always report a role on SubagentStop. An empty string
+    normalizes to "main", which credits a subagent's turns to the main thread in
+    /route:audit — the one number the plugin exists to produce."""
+    for agent_type in ("", None):
+        payload = {"hook_event_name": "SubagentStop", "session_id": "t1",
+                   "agent_id": "a1", "transcript_path": "/tmp/main.jsonl",
+                   "agent_transcript_path": "/tmp/agent-a1.jsonl"}
+        if agent_type is not None:
+            payload["agent_type"] = agent_type
+        run_observe(payload, project)
+    rows = [json.loads(line) for line in
+            (project / ".claude" / "routing" / "dispatch.jsonl").read_text().splitlines()]
+    assert [row["agent_type"] for row in rows] == ["unknown", "unknown"]
+    assert normalize_role(rows[0]["agent_type"]) != "main"
+
+
+def test_a_reported_role_is_still_recorded_verbatim(project):
+    run_observe({"hook_event_name": "SubagentStart", "session_id": "t1",
+                 "agent_type": "route:scout", "agent_id": "a1"}, project)
+    rows = [json.loads(line) for line in
+            (project / ".claude" / "routing" / "dispatch.jsonl").read_text().splitlines()]
+    assert rows[0]["agent_type"] == "route:scout"

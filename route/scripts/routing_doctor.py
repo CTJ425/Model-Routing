@@ -197,12 +197,13 @@ def check_dispatch_log() -> None:
             except Exception:
                 continue
             total += 1
-            if not row.get("agent_type"):
+            if (row.get("agent_type") or "unknown") == "unknown":
                 blank += 1
     if blank:
         check("WARN", "dispatch log",
-              "%d of %d row(s) have an empty or missing agent_type; those rows are "
-              "invisible to the per-role split in /route:audit." % (blank, total))
+              "%d of %d row(s) carry no role: the harness reported no agent_type. They "
+              "are counted as `unknown` in the per-role split in /route:audit, not as "
+              "main-thread turns." % (blank, total))
         return
     check("PASS", "dispatch log", "%d row(s) recorded." % total)
 

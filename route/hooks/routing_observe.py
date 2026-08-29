@@ -44,6 +44,8 @@ from _config import (  # noqa: E402
 
 REPEAT_EVERY = 8
 DISPATCH_MAX_BYTES = 5 * 1024 * 1024
+# The harness does not always report a role on SubagentStop. See log_dispatch.
+UNKNOWN_ROLE = "unknown"
 
 
 def routing_dir(payload) -> str:
@@ -70,7 +72,10 @@ def log_dispatch(payload, d: str) -> None:
     row = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "event": payload.get("hook_event_name"),
-        "agent_type": payload.get("agent_type"),
+        # An empty agent_type normalizes to "main", so a row left blank credits a
+        # subagent's turns to the main thread in /route:audit. Record it as explicitly
+        # unattributed instead: a role the audit cannot name must not read as a role it can.
+        "agent_type": payload.get("agent_type") or UNKNOWN_ROLE,
         "agent_id": payload.get("agent_id"),
         "effort": effort_level,
         "session": payload.get("session_id"),

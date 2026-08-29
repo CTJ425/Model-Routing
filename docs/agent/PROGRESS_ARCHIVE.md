@@ -4,6 +4,27 @@ Older progress entries, prepended from `PROGRESS.md` so newest-first order holds
 
 ---
 
+## 📅 Log: 2026-08-27 12:30:18 CST (0.8.1 — builder and reviewer default to high effort)
+
+- **Changed**: route/agents/builder.md, route/agents/reviewer.md, route/.claude-plugin/plugin.json
+- **Why**: both roles shipped at `effort: medium`. builder implements against a brief and
+  reviewer is the only gate on risk work, so both are places where a shallower pass costs
+  more than it saves — a missed defect is paid for by the main session at the top model
+  tier. scout and scribe stay `low`: they map and transcribe, and neither benefits.
+- **Verify**: PASS — `python3 -m pytest tests/ -q` — 177 passed, 0 failed
+- **Verify**: PASS — `claude plugin validate ./route` — Validation passed
+- **Tests**: 177 passed, 0 failed (no test changes; `effort` is frontmatter the suite does
+  not assert on, and it is not settable per project — the schema has no `effort` key, so the
+  agent frontmatter is the only place it lives)
+- **Lint**: NOT RUN — project defines no lint command
+- **Review**: not dispatched — two frontmatter values, validated by the plugin CLI
+- **Accepted risk**: builder and reviewer dispatches get more expensive per run. Measured
+  baseline to compare against: over one stock-pnl-web session at medium, 2 builder runs cost
+  $1.29 and 2 reviewer runs $1.70, against $17.23 for the main session — so the headroom is
+  real, but re-measure with /route:audit before assuming it stayed that way.
+
+---
+
 ## 📅 Log: 2026-08-27 12:05:00 CST (0.8.0 — out-of-scope Bash writes deny instead of ask)
 
 - **Changed**: route/hooks/routing_guard.py, route/.claude-plugin/plugin.json, tests/test_guard.py, README.md, docs/MODEL_ROUTING_SPEC_ZH.md
