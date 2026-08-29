@@ -46,6 +46,43 @@ claude plugin install route@route
 
 ---
 
+## 更新方式
+
+插件安裝於 **user scope**（`~/.claude/plugins/`），因此更新一次，您所有的專案都會同步套用新版本。
+
+更新需要兩個步驟：先刷新 marketplace 的本地 clone，才能取得新版本；再更新插件本身。
+
+### 在終端機 (CLI)
+
+```bash
+claude plugin marketplace update route     # 步驟 1：刷新 marketplace clone
+claude plugin update route@route           # 步驟 2：更新插件
+claude plugin list                         # 驗證：確認 Version 與 Scope
+```
+
+### 在 Claude Code 會話內
+
+```
+/plugin marketplace update route    # 步驟 1：刷新 marketplace clone
+/plugin                             # 步驟 2：於互動面板中更新 route
+```
+
+> **注意**：會話內**沒有** `/plugin update <plugin>` 這個子指令。`update` 只存在於 marketplace 層級 (`/plugin marketplace update`) 與 CLI (`claude plugin update`)。插件本身的更新請使用互動式 `/plugin` 面板。
+
+### 更新後必須重啟
+
+CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執行舊版的 Hooks。** 若不確定實際生效的版本，執行 `/route:doctor` 或 `claude plugin list` 進行確認。
+
+### 請勿手動 pull marketplace clone
+
+`~/.claude/plugins/marketplaces/route` 由 Claude Code 與其版本快取 (`~/.claude/plugins/cache/`) 一併管理。手動 `git pull` 會使兩者失同步——clone 指向新版 commit，但快取仍是舊版目錄，且插件實際載入的是快取。請一律使用上述指令。
+
+### 專案設定不受更新影響
+
+`.claude/route.config.json` 屬於**專案設定**，不是安裝內容。插件更新既不會覆蓋它，也不會將它帶入其他專案。這也是各角色的模型等級應透過 `/route:config` 調整、而非手改 Agent frontmatter 的原因——frontmatter 位於 user scope 的快取目錄中，下次更新即會被覆寫。
+
+---
+
 ## 系統架構與路由生命週期
 
 ![route Architecture](docs/architecture.svg)
