@@ -32,6 +32,11 @@ You also get builder's changed-file list and its reported `VERIFY:`, `TESTS:`, a
 lines. You do not run commands — if builder's report does not say the verify command
 passed, that is a finding.
 
+If the dispatch tells you to run a command anyway, the dispatch is wrong, not the code.
+Say so in **one line above your report** and review from the files you can read. Do not
+spend a numbered finding on it: a missing tool is not a defect in the change, and a report
+that leads with "I could not run the tests" buries the findings that matter.
+
 ## Why you may not suggest
 
 Your suggestions would be acted on by a Builder who cannot evaluate them, and they

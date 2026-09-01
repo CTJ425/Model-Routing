@@ -158,6 +158,24 @@ The `Files` list is the builder's task-level contract. The PreToolUse guard bloc
 categories, but it cannot inspect the inline prompt or spec to enforce an arbitrary per-task
 file list. The builder and reviewer must therefore report and check that list explicitly.
 
+### Prove the input before you dispatch
+
+A wrong contract is not caught by review — it is *implemented*, then reviewed as correct, and
+the rework lands two rounds later. Four checks, each cheap, each having caught a real defect:
+
+- **The `Verify` command must be the one that actually gates, and you must have watched it
+  fail.** A verify line that already passes cannot detect anything, and a command that skips
+  part of the tree reports a false green. Run it yourself before writing it into the brief.
+- **Lane 2: type-check the failing test against the signature the spec proposes.** A test you
+  cannot even write against the proposed contract *is* the spec error, surfacing for free
+  before a builder spends a round on it.
+- **Validate any classification or matching rule against real data first, and record the
+  counts in the spec.** A rule that reads as obvious in prose can be wrong on the actual rows;
+  the count is the evidence, and it belongs where the next reader will see it.
+- **State the negative case.** A `Contract` that says only what the code must do produces code
+  that is right in the happy path. Write what it must *not* do, and why — that sentence is
+  what stops a later change from reintroducing the defect the spec exists to prevent.
+
 ## Step 3 — build (sonnet by default)
 
 When `roles.builder.enabled` is `false` the guard denies the dispatch and this session
@@ -189,6 +207,12 @@ Check `review.policy` in `.claude/route.config.json`:
 | `always` | dispatch `route:reviewer` on every builder round |
 | `risk` (default) | dispatch when any trigger below fires |
 | `never` | never dispatch; the test is the only gate |
+
+**Reviewer has no Bash — it cannot run anything.** Its tools are `Read`, `Glob` and `Grep`
+by design. A brief that tells it to run the tests earns a finding about the missing tool
+instead of a finding about the code, and does so on every dispatch. **Paste builder's
+reported `VERIFY:`, `TESTS:` and `LINT:` lines into the dispatch** and let reviewer judge
+them as given.
 
 Under `risk`, dispatch `route:reviewer` when **any** configured trigger is true. The default
 trigger IDs are:
@@ -254,6 +278,15 @@ definitions and project instructions that Step 0.25 identifies as the flat floor
 
 Never forward reviewer's raw text to builder. Translate it into an instruction.
 
+**Where a wrong answer is silent, read the diff yourself.** Money arithmetic, tax and fee
+splits, authorization decisions, schema migrations, retry logic: a green test only proves
+the test agreed with the code, and reviewer sees what the contract told it to look for.
+Two defects of exactly this shape survived both gates in one session and were caught by the
+main session reading the diff — a retry wrapped around a non-idempotent write, which would
+have duplicated records after a dropped response, and an optional parameter with a silent
+default that would have applied the wrong rate to a whole class of inputs. Reading a diff
+costs context replay on every later turn, so spend it here and nowhere else.
+
 ## Step 6 — record (haiku by default)
 
 Skip this step entirely when `bookkeeping.enabled` is `false` — that project keeps no
@@ -267,6 +300,18 @@ the language from `language.artifacts`, and the timezone from `bookkeeping.timez
 There is no implicit `version` field; pass one only when the task explicitly defines it.
 Do not update the tracking docs yourself — it is mechanical work at the most expensive rate
 in the system, and a hook will ask you to reconsider if you try.
+
+**Hand scribe finished prose for anything a human will read later** — a changelog entry, a
+release note, a commit-message body. Scribe places text; composing it from notes is
+inference, and on a haiku tier that is where it invents file paths, APIs and changes that
+never happened. It keeps the file surgery either way, which is the part that actually
+replaces main-session turns. The arithmetic favours writing it: a page of prose from this
+session costs a fraction of one main turn, while one correction round-trip costs several
+*and* the prose still has to be written.
+
+**Cap a dispatch at two tracking files.** A brief spanning every record drives scribe into
+its turn ceiling, and each resume replays the whole context again. Two smaller dispatches
+cost less than one that has to be resumed.
 
 **What decides is how much bookkeeping there is, not which lane produced it.** Dispatch
 scribe when there is real work in the record — several files to list, a risk to write up,
