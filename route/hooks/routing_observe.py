@@ -105,7 +105,7 @@ BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or 
 - **Cost here is context replay, not output.** Replaying context into the main
   session's window is billed on every remaining turn of the session, so bulk content
   goes to a subagent even when the task looks trivial.
-- **Roster.** This session plans, writes specs, and adjudicates.{roster_clause}
+- **Roster.** This session plans, sizes the work, and adjudicates.{roster_clause}
   Per-role model tiers live in `.claude/route.config.json` (see `/route:config`).
 - **Guards will ask** before this session edits production code{record_clause},
   dispatches `Explore`/`general-purpose`, or issues an unbounded Read over {read_kb}KB.
@@ -113,6 +113,7 @@ BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or 
 
 ROSTER_CLAUSE = {
     "scout": "`scout` reads and compresses",
+    "architect": "`architect` discusses architecture, writes the Lane 2 spec, and root-causes hard bugs",
     "builder": "`builder` implements",
     "reviewer": "`reviewer` checks risk work",
     "scribe": "`scribe` records",

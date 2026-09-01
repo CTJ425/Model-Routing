@@ -76,7 +76,7 @@ this project actually needs — every unset key falls back to the plugin's defau
   "$schema": "${CLAUDE_PLUGIN_ROOT}/schema/route.config.schema.json",
   "version": 2,
   "paths": { "prod": ["<confirmed-path>/"] },
-  "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
+  "models": { "scout": "haiku", "architect": "opus", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
   "bookkeeping": { "enabled": true, "timezone": "<confirmed-timezone>" },
   "language": { "artifacts": "<confirmed-language>" },
   "review": { "policy": "risk" }

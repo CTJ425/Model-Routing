@@ -231,6 +231,18 @@ BUILDER_BASH_UNRESOLVED_REASON = (
     "one simple command with literal paths, or use `Write`/`Edit`."
 )
 
+ARCHITECT_BASH_OUT_OF_SCOPE_REASON = (
+    "This Bash command writes to {targets}, which is not a spec or test path. Architect "
+    "owns the contract — the spec and the failing tests — and nothing else. It runs the "
+    "failing test to read the trace; it does not implement. Report the blocker instead."
+)
+
+ARCHITECT_BASH_UNRESOLVED_REASON = (
+    "This Bash command writes to the filesystem in a shape this guard cannot resolve to "
+    "a target path, so it cannot be confirmed inside the spec and test paths. Re-issue it "
+    "as one simple command with literal paths, or use `Write`/`Edit`."
+)
+
 REASONS = {
     ("main", "prod"): (
         "Main session is editing production code. That is expensive-model-priced "
@@ -250,10 +262,18 @@ REASONS = {
     ("builder", "doc"): "Builder writes production code only. Records belong to scribe.",
     ("builder", "record"): "Builder writes production code only. Records belong to scribe.",
     ("builder", "spec"): "Builder implements the spec; it does not amend it. Report the conflict.",
+    ("architect", "prod"): (
+        "Architect owns the contract, not the implementation: it writes the spec and the "
+        "failing tests, then hands builder a path. Production code is builder's."
+    ),
+    ("architect", "doc"): "Architect writes the spec and failing tests only. Records belong to scribe.",
+    ("architect", "record"): "Architect writes the spec and failing tests only. Records belong to scribe.",
+    ("architect", "config"): "Architect writes the spec and failing tests only, not project config.",
 }
 
 RULES = {
     "main": {"prod": "@main", "record": "@main"},
+    "architect": {"prod": "deny", "doc": "deny", "record": "deny", "config": "deny"},
     "builder": {"test": "deny", "doc": "deny", "record": "deny", "spec": "deny"},
     "scribe": {"prod": "deny", "test": "deny", "spec": "deny", "config": "deny"},
     "scout": {"*": "deny"},
@@ -466,6 +486,24 @@ def handle_builder_bash(command, project, cfg) -> None:
     sys.exit(0)
 
 
+def handle_architect_bash(command, project, cfg) -> None:
+    """Architect's Bash scope is its Write/Edit scope: a spec or test path, or anything
+    outside the repository. It runs the failing test to read the trace; it does not
+    implement, so a write to a production path is out of role."""
+    targets = _write_targets(command)
+    if targets is None:
+        respond("deny", "[routing/architect] " + ARCHITECT_BASH_UNRESOLVED_REASON)
+    outside = []
+    for target in targets:
+        rel = rel_path(target, project)
+        if rel is not None and classify(rel, cfg) not in ("spec", "test"):
+            outside.append(rel)
+    if outside:
+        respond("deny", "[routing/architect] " + ARCHITECT_BASH_OUT_OF_SCOPE_REASON.format(
+            targets=", ".join(sorted(set(outside))[:3])))
+    sys.exit(0)
+
+
 def handle_bash(role, tool_input, project, cfg) -> None:
     if not cfg["guard"].get("bashWriteDetection", True):
         sys.exit(0)
@@ -485,6 +523,8 @@ def handle_bash(role, tool_input, project, cfg) -> None:
             role=role, scope="anything at all — it is read-only"))
     if role == "builder":
         handle_builder_bash(command, project, cfg)
+    if role == "architect":
+        handle_architect_bash(command, project, cfg)
     if role == "scribe" and _scribe_redirect_in_scope(command, project, cfg):
         sys.exit(0)
     respond("deny", "[routing/%s] " % role + BASH_REASON.format(
@@ -518,6 +558,12 @@ def handle_write(role, tool_input, project, cfg) -> None:
             "Builder may write production-code paths only; the spec's Files list is "
             "the remaining task-level scope.")
         respond("deny", "[routing/builder] " + reason)
+
+    if role == "architect" and cls not in ("spec", "test"):
+        reason = REASONS.get((role, cls)) or (
+            "Architect writes the spec and the failing tests only; everything else "
+            "belongs to another role. Report the conflict instead.")
+        respond("deny", "[routing/architect] " + reason)
 
     if cls == "record":
         body = tool_input.get("new_string") or tool_input.get("content") or ""

@@ -1,6 +1,6 @@
 ---
 name: route
-description: Run a task through the model-routing loop — classify it into a lane, dispatch scout/builder/reviewer/scribe at their own model tiers, and verify. Use when starting a feature, fixing a bug, working through a tracking doc's open items, or when the user says "route this", "run the next task", or asks why everything is running on the most expensive model.
+description: Run a task through the model-routing loop — classify it into a lane, dispatch scout/architect/builder/reviewer/scribe at their own model tiers, and verify. Use when starting a feature, fixing a bug, working through a tracking doc's open items, or when the user says "route this", "run the next task", or asks why everything is running on the most expensive model.
 ---
 
 # Routing loop
@@ -20,7 +20,7 @@ wrong cost, and how much subjective judgement is involved.
 | --- | --- | --- |
 | **0 — inline** | The edit is **surgical** — a typo, a version bump, a one-line fix, a few hunks you can name in one sentence — **and** it lands in one file you have read the relevant region of — scout's map tells you *where* to edit, never *what the text is*, so a map alone is not enough. Trips none of the Step 4 review triggers, and you can name the verification command *before* editing | main session -> verify -> record (Step 6) |
 | **1 — bounded** (default) | A clear fix or feature inside known modules | `route:scout` (if the area is unmapped) -> brief -> `route:builder` -> `route:reviewer` (per Step 4 policy) -> `route:scribe` |
-| **2 — elevated risk** | Unknown-cause bug, cross-module change, or any of the Step 4 triggers known up front: persisted state, authorization, a boundary, a silent calculation, control-flow behaviour, or a builder blocker | `route:scout` -> spec + failing tests -> `route:builder` -> `route:reviewer` (always) -> adjudicate -> `route:scribe` |
+| **2 — elevated risk** | Unknown-cause bug, cross-module change, or any of the Step 4 triggers known up front: persisted state, authorization, a boundary, a silent calculation, control-flow behaviour, or a builder blocker | `route:scout` -> `route:architect` (spec + failing tests) -> `route:builder` -> `route:reviewer` (always) -> adjudicate -> `route:scribe` |
 
 State the lane in one line before you act. If you pick Lane 0 for a tracked task,
 record why in the project's progress log.
@@ -60,15 +60,15 @@ trips a review trigger gets reviewed however small it is.
 
 ## Step 0.5 — model overrides and the live roster
 
-Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
+Before every dispatch in Steps 1, 2.5, 3, 4 and 6, check the project root for
 `.claude/route.config.json`:
 
 ```json
 {
   "version": 2,
   "paths": { "prod": ["src/"] },
-  "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
-  "roles": { "scout": { "enabled": true }, "builder": { "enabled": true },
+  "models": { "scout": "haiku", "architect": "opus", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
+  "roles": { "scout": { "enabled": true }, "architect": { "enabled": true }, "builder": { "enabled": true },
              "reviewer": { "enabled": true }, "scribe": { "enabled": true } },
   "review": { "policy": "risk" },
   "bookkeeping": { "enabled": true }
@@ -135,8 +135,26 @@ caller paid for the reading twice.
 
 ## Step 2 — the builder's input, sized by lane
 
-The main session owns this. Specs, failing tests, and adjudication do not get delegated —
-they are the reason this session runs on the expensive model.
+The main session owns the **Lane 1 brief** and all **adjudication** (Steps 4–5). It does
+not delegate those: judging a reviewer finding or a Verify result needs loop state a
+subagent does not hold. A **Lane 2 spec plus failing tests** is a bigger job — it is a
+dispatch to `route:architect` (Step 2.5), on the expensive tier, because a wrong contract
+is not caught by review, it is implemented and then reviewed as correct.
+
+> **If this session is not itself on the expensive tier** — an `opusplan` main session
+> drops to the cheaper tier once planning ends, and a session started on a mid tier never
+> had it — then no model sits above the builder in the execution loop unless
+> `route:architect` is dispatched. Under that setup:
+>
+> - Route the Lane 2 spec through `route:architect` even when you could just about write
+>   it here, and set `review.policy` to `always` so the review gate is never a judgement
+>   call this session gets wrong silently. `/route:config review.policy=always`.
+> - For an **open architecture question** — the shape of the change is not yet decided —
+>   dispatch `route:architect` in **consult mode** (Step 2.5): it returns options and a
+>   recommendation as a design note the human reads directly, and is resumed with their
+>   decisions. The alternative, when the human wants a live back-and-forth rather than a
+>   relayed one, is for them to switch this session to the expensive tier for that phase
+>   (`/model`) and switch back after — the relay through this session is lossy.
 
 **Lane 1 — a brief, in the dispatch prompt. No file.** A spec file for a bounded fix is
 overhead that does not pay for itself. Five headings, inline:
@@ -149,10 +167,10 @@ Verify: <the exact command> — not done until this passes
 Non-goals: <what not to do>
 ```
 
-**Lane 2 — a spec file plus failing tests.** Write the spec with the same five sections
-expanded, add a `## Test charter` table (`| Case | Expected outcome | Layer / file |`),
-and write the failing tests **before** dispatching. Pass builder the spec path and the
-test path only.
+**Lane 2 — a spec file plus failing tests, written by `route:architect`.** See Step 2.5.
+The spec has the same five sections expanded, plus a `## Test charter` table
+(`| Case | Expected outcome | Layer / file |`), and the failing tests exist before the
+builder is dispatched. The builder gets the spec path and the test path only.
 
 The `Files` list is the builder's task-level contract. The PreToolUse guard blocks role-level
 categories, but it cannot inspect the inline prompt or spec to enforce an arbitrary per-task
@@ -175,6 +193,35 @@ the rework lands two rounds later. Four checks, each cheap, each having caught a
 - **State the negative case.** A `Contract` that says only what the code must do produces code
   that is right in the happy path. Write what it must *not* do, and why — that sentence is
   what stops a later change from reintroducing the defect the spec exists to prevent.
+
+## Step 2.5 — architect (opus by default)
+
+Skip this step entirely when `roles.architect.enabled` is `false` — the guard denies the
+dispatch, so write the Lane 2 spec and failing tests in this session instead and say so
+in one line.
+
+Otherwise dispatch `route:architect`, telling it which **mode** it is in:
+
+- **spec** (the Lane 2 default) — it writes the spec under `paths.specs`, writes the
+  failing tests, and runs the `Verify` command to confirm they fail for the stated
+  reason. It never writes production code — the guard denies that. You get back the spec
+  path, the test paths, and the `Verify` line; pass those to the builder in Step 3.
+- **consult** — the shape of the change is not yet decided and the caller (relaying a
+  human) wants options first. It writes a `<task>-design.md` under `paths.specs` —
+  options, a recommendation, open questions — and stops. Surface the note and its
+  `DECISIONS-NEEDED` list to the human; relay their answers back with `SendMessage` to
+  the same dispatch. When the design is settled, tell it so and it produces the spec and
+  failing tests in that same run. Use this whenever architecture discussion is needed and
+  this session is not on the expensive tier; the direct alternative is the human
+  switching this session's model for that phase.
+- **root-cause** — a bug whose cause is unknown, or a builder that returned `BLOCKERS` on
+  two consecutive rounds. It finds the cause, states it, then produces the spec.
+- **adjudication** — Step 4/5 left you a reviewer `FAIL` you cannot rule on. See Step 5.
+
+**Do not** dispatch `route:architect` for Lane 0 or a Lane 1 brief. The Step 0.25 dispatch
+floor applies to it at the most expensive cold-start cost in the system; a five-line brief
+straight to the builder wins every time. Architect writes contracts and design notes, not
+briefs.
 
 ## Step 3 — build (sonnet by default)
 
@@ -261,15 +308,20 @@ prose contract. That is both the larger read and the weaker signal.
 If you skip review, say so in one line and name which trigger you checked. A silent
 skip is how this step stopped happening.
 
-## Step 5 — adjudicate (main session only)
+## Step 5 — adjudicate
+
+The ruling is the main session's — it holds the loop state. Where the call turns on a
+design question this session is not sure of, or the spec needs re-deriving, `route:architect`
+is the advisor it consults; the main session still decides what to do with the answer.
 
 | Reviewer says | You do |
 | --- | --- |
 | PASS, no findings | go to step 6 |
 | PASS with RISK | record the risk in the project's bug-tracking doc when bookkeeping is enabled; otherwise carry it into the final outcome, then go to step 6 |
 | FAIL, 1st time | write a fix instruction naming file + line + required post-condition; resume the builder you already dispatched (in Claude Code, `SendMessage` to that agent) and send only the fix instruction |
-| FAIL, 2nd time | **stop dispatching.** The defect is in the spec ~80% of the time. Fix the spec, restart from step 3 |
+| FAIL, 2nd time | **stop dispatching.** The defect is in the spec ~80% of the time. Fix the spec, restart from step 3. If the spec came from `route:architect`, or this session is not on the expensive tier, hand the spec fix back to `route:architect` rather than doing it here |
 | FAIL, 3rd time | stop and ask the user. Do not loop |
+| FAIL you cannot rule on — the finding turns on a design call this session is not sure of | dispatch `route:architect` in adjudication mode: give it the brief, the reviewer findings, and the out-of-repo diff path, and ask only whether each finding is real and what the minimal fix is. It does not implement. Then act on its ruling |
 | reviewer returned no `VERDICT`, or builder returned no report block | treat as truncated, never as PASS; re-dispatch with a narrower `Files` list or split the task |
 
 One session of this project issued 11 subagent dispatches that produced only 6 transcripts,

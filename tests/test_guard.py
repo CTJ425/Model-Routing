@@ -229,7 +229,10 @@ def with_roles(project, **enabled):
     write_config(project, cfg)
 
 
-@pytest.mark.parametrize("role", ["scout", "builder", "reviewer", "scribe"])
+ALL_ROLES = ["scout", "architect", "builder", "reviewer", "scribe"]
+
+
+@pytest.mark.parametrize("role", ALL_ROLES)
 def test_disabled_role_is_denied(role, project):
     with_roles(project, **{role: False})
     got = dispatch("route:" + role, project)
@@ -237,14 +240,14 @@ def test_disabled_role_is_denied(role, project):
     assert "roles.%s.enabled" % role in reason(got)
 
 
-@pytest.mark.parametrize("role", ["scout", "builder", "reviewer", "scribe"])
+@pytest.mark.parametrize("role", ALL_ROLES)
 def test_enabled_role_dispatches_silently(role, project):
     with_roles(project, **{role: True})
     assert decision(dispatch("route:" + role, project)) is None
 
 
 def test_every_role_is_enabled_by_default(project):
-    for role in ("scout", "builder", "reviewer", "scribe"):
+    for role in ALL_ROLES:
         assert decision(dispatch("route:" + role, project)) is None
 
 
@@ -576,6 +579,53 @@ def test_builder_bash_write_outside_prod_is_denied(command, project):
 def test_builder_bash_unresolvable_target_is_denied(command, project):
     """Resolution fails in one direction only: unknown is denied, never allowed."""
     got = bash("route:builder", command, project)
+    assert decision(got) == "deny"
+    assert "cannot resolve" in reason(got)
+
+
+# --- architect owns the contract: it writes specs and failing tests, nothing else ---
+
+@pytest.mark.parametrize("path", [
+    "docs/agent/specs/task-1.md",
+    "docs/agent/specs/task-1-design.md",   # consult-mode design note
+    "tests/test_new.py",
+    "src/feature_test.py",
+])
+def test_architect_may_write_spec_and_test_paths(path, project):
+    assert decision(write("route:architect", path, project)) is None
+
+
+@pytest.mark.parametrize("path", [
+    "src/a.ts",
+    "README.md",
+    "docs/agent/PROGRESS.md",
+    "docs/agent/notes.md",
+    ".claude/route.config.json",
+])
+def test_architect_may_not_write_outside_the_contract(path, project):
+    got = write("route:architect", path, project)
+    assert decision(got) == "deny"
+    assert "[routing/architect]" in reason(got)
+
+
+def test_architect_bash_write_to_spec_or_test_is_allowed(project):
+    assert decision(bash("route:architect", "cat > docs/agent/specs/t.md", project)) is None
+    assert decision(bash("route:architect", "mkdir -p tests/newdir", project)) is None
+
+
+@pytest.mark.parametrize("command", [
+    "sed -i 's/a/b/' src/a.ts",
+    "rm src/dead.ts",
+    "echo done > README.md",
+])
+def test_architect_bash_write_to_production_is_denied(command, project):
+    got = bash("route:architect", command, project)
+    assert decision(got) == "deny"
+    assert "spec or test path" in reason(got)
+
+
+def test_architect_bash_unresolvable_target_is_denied(project):
+    got = bash("route:architect", "cat > $OUT", project)
     assert decision(got) == "deny"
     assert "cannot resolve" in reason(got)
 

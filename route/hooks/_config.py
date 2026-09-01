@@ -21,7 +21,7 @@ import re
 MAIN_ALIASES = {"", "main", "default", "root", "none"}
 
 # The roles this plugin owns. Any other agent in the repo is not ours to police.
-ROUTE_ROLES = ("scout", "builder", "reviewer", "scribe")
+ROUTE_ROLES = ("scout", "architect", "builder", "reviewer", "scribe")
 
 # Stable names let the skill, the review nudge, and project configuration refer to
 # the same policy without copying prose into three different files.
@@ -49,7 +49,7 @@ DEFAULTS = {
         "specs": "docs/agent/specs",
     },
     "models": {
-        "scout": "haiku", "builder": "sonnet",
+        "scout": "haiku", "architect": "opus", "builder": "sonnet",
         "reviewer": "sonnet", "scribe": "haiku",
     },
     "bookkeeping": {
