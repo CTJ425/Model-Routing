@@ -1,12 +1,11 @@
 # route
 
-`route` 是一個專為 Claude Code 設計的模型路由 (Model-Routing) 插件。其核心目標是**將昂貴的高階模型從機械式的執行工作中解放出來**：主會話（Boss）專注於高階規劃與決策，五個專屬子代理人（Subagents）則分工處理地圖繪製、規格擬定、代碼實作、風險審查與日誌謄寫。
+`route` 是一個專為 Claude Code 設計的模型路由 (Model-Routing) 插件。其核心目標是**將昂貴的高階模型從機械式的執行工作中解放出來**：主會話（Boss）專注於高階規劃與決策，四個專屬子代理人（Subagents）則分工處理地圖繪製、代碼實作、風險審查與日誌謄寫。
 
 | 角色 (Role) | 執行位置 | 預設模型與 Effort | 負責範疇 (Owns) | 絕對禁止 (Must Never) |
 |---|---|---|---|---|
-| **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 路由分級、順序排定、Lane 1 簡報撰寫、結果裁決 | 撰寫生產程式碼、直接編輯追蹤記錄 |
+| **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 路由分級、順序排定、規格/簡報撰寫、結果裁決 | 撰寫生產程式碼、直接編輯追蹤記錄 |
 | **scout** | 子代理人 (Subagent) | `haiku` (low effort, 30 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
-| **architect** | 子代理人 (Subagent) | `opus` (high effort, 50 turns) | 架構討論與建議（consult 模式，輸出 design note）、撰寫 Lane 2 規格與失敗測試、疑難缺陷根因分析、審查爭議裁決 | 撰寫生產程式碼、修改追蹤記錄與專案配置 |
 | **builder** | 子代理人 (Subagent) | `sonnet` (high effort, 60 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
 | **reviewer** | 子代理人 (Subagent) | `sonnet` (high effort, 40 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
 | **scribe** | 子代理人 (Subagent) | `haiku` (low effort) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
@@ -93,31 +92,25 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 模型路由迴圈涵蓋 7 個精確階段，具備自動角色邊界防護與重試裁決迴圈：
 
 ```
-[0. 任務分級 Lane] ─► [1. Scout (地圖探索)] ─► [2. Boss 簡報 / Architect 規格 (Lane 2)] ─► [3. Builder (代碼實作)]
-                                                                                          │
-[6. Scribe (成果記帳)] ◄── [5. Boss (結果裁決)] ◄──────── [4. Reviewer (風險審查)] ◄──────┘
+[0. 任務分級 Lane] ──► [1. Scout (地圖探索)] ──► [2. Boss (規格擬定)] ──► [3. Builder (代碼實作)]
+                                                                                │
+[6. Scribe (成果記帳)] ◄── [5. Boss (結果裁決)] ◄── [4. Reviewer (風險審查)] ◄┘
          ▲                          │
-         └──────── (Lane 0) ────────┴──► [裁決迴圈：定位修復 / 修正規格 (交回 Architect) / 升級人工]
+         └──────── (Lane 0) ────────┴──► [裁決迴圈：定位修復 / 修正規格 / 升級人工]
 ```
 
 1. **Step 0 — 任務分級與分派門檻評估 (`Boss`)**：
    - 評估任務風險與推論需求，並計算任務規模是否超過子代理人的冷啟動開銷（Cold-start Overhead）。
    - **Lane 0 (極小就地修改)**：低於分派門檻的單行修復或版本號更新。Boss 直接在主會話中修改、驗證並完成單行記錄。
    - **Lane 1 (邊界明確的功能/修復)**：已知模組內的常規修改。Boss 撰寫行內簡報（5 段式 Inline Brief）。
-   - **Lane 2 (高風險/跨模組變更)**：複雜缺陷、狀態/資料庫變更、認證或 API 邊界。分派 `route:architect` 撰寫完整規格檔案（Spec）並先編寫失敗測試。
+   - **Lane 2 (高風險/跨模組變更)**：複雜缺陷、狀態/資料庫變更、認證或 API 邊界。Boss 撰寫完整規格檔案（Spec）並先編寫失敗測試。
 
 2. **Step 1 — 程式碼拓撲繪製 (`scout` | Haiku 預設，Low Effort)**：
    - 僅在目標區域尚未探索時分派。執行唯讀掃描，回傳約 40 行的結構化地圖摘要。
    - **預算規範**：預設上限 `maxTurns: 30`（不支援專案自訂覆寫）。每次分派請給予**單一明確問題**並在已知時提供行號範圍；若在單次提示中堆疊多個跨大檔案的問題，將耗盡 30 回合預算而無法回傳可用資訊。若預算不足，Scout 會遵循優雅降級協議，以 `NOT ANSWERED:` 明列未完部分，呼叫端可透過 `SendMessage` 恢復會話續問。
 
-3. **Step 2 — 簡報與規格撰寫**：
-   - **Lane 1（`Boss` | Session 模型）**：Boss 撰寫行內簡報 — 任務契約、完整 `Files` 異動檔案清單、精確的 `Verify` 驗證指令與 `Non-goals`（非目標）。
-   - **Lane 2（`architect` | Opus 預設，High Effort）**：分派 `route:architect`，並指定**模式**：
-     - `spec`：撰寫完整規格檔案與失敗測試，執行 `Verify` 確認測試如預期失敗。
-     - `consult`：變更形狀尚未定案時，先輸出 `<task>-design.md`（選項、建議、待決問題）供你直接閱讀批註，再透過 `SendMessage` 回傳你的決定；定案後於同一次分派產出規格與失敗測試。
-     - `root-cause`：疑難缺陷根因分析；`adjudication`：Step 4 審查爭議裁決。
-     - 所有角色皆絕對不直接編寫生產代碼。
-   - 若主會話本身非高階模型（`opusplan` 規劃結束後降級，或會話一開始就用中階模型），Lane 2 一律走 `route:architect`，並建議將 `review.policy` 設為 `always`。需要即時來回討論架構時，另一條路是暫時將主會話切換至高階模型（`/model`），討論完再切回。
+3. **Step 2 — 規格與簡報撰寫 (`Boss` | Session 模型)**：
+   - 高階模型撰寫任務契約、完整 `Files` 異動檔案清單、精確的 `Verify` 驗證指令與 `Non-goals`（非目標）。Boss 絕對不直接編寫生產代碼。
 
 4. **Step 3 — 程式碼實作 (`builder` | Sonnet 預設，High Effort)**：
    - 讀取 Spec/Brief，嚴格在指定的 `Files` 清單內實作變更，並照字面（Verbatim）原樣執行驗證指令與測試套件。
@@ -129,8 +122,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 6. **Step 5 — 裁決與反饋迴圈 (`Boss` | Session 模型)**：
    - **PASS**：直接推進至 Step 6。
    - **FAIL (第 1 次)**：Boss 撰寫精確定位修復指令（檔案 + 行號 + 後置條件），並透過 `SendMessage` 恢復先前已分派的 `builder` 繼續修復（保留先前的上下文，避免重複支付冷啟動開銷）。
-   - **FAIL (第 2 次)**：約 80% 機率為規格本身存在瑕疵。修正 Spec/Brief 後重啟實作；若規格出自 `route:architect`，或主會話已降級，則將規格修正交回 `route:architect`。
-   - **FAIL (無法裁決)**：以裁決模式分派 `route:architect`，提供簡報、審查發現與外部 Diff 路徑，僅詢問各項發現是否成立與最小修復方案。Architect 不實作。
+   - **FAIL (第 2 次)**：約 80% 機率為規格本身存在瑕疵。Boss 修正 Spec/Brief 後重啟實作。
    - **FAIL (第 3 次)**：終止自動化迴圈，升級交由人工工程師介入。
 
 7. **Step 6 — 成果記帳與審計存檔 (`scribe` | Haiku 預設，Low Effort)**：
@@ -155,14 +147,12 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
   },
   "models": {
     "scout": "haiku",
-    "architect": "opus",
     "builder": "sonnet",
     "reviewer": "sonnet",
     "scribe": "haiku"
   },
   "roles": {
     "scout": { "enabled": true },
-    "architect": { "enabled": true },
     "builder": { "enabled": true },
     "reviewer": { "enabled": true },
     "scribe": { "enabled": true }
@@ -188,7 +178,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 - `paths.prod`：生產代碼的相對路徑或 Glob 規則，Guard 會據此界定生產代碼範圍。
 - `paths.test`：測試檔案路徑規則，Guard 會嚴禁 `builder` 擅自修改此範圍。
 - `models.<role>`：針對此專案覆寫該角色的分派模型（支援任何別名或完整模型 ID）。此設定僅作用於分派參數，不會修改插件本體檔案；若環境變數 `CLAUDE_CODE_SUBAGENT_MODEL` 已設定，該環境變數優先度高於此處設定。
-- `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（五個角色均可獨立關閉）。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。
+- `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（四個角色均可獨立關閉）。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。
 - `bookkeeping.enabled`：設為 `false` 時僅啟用模型路由功能（不分派 `scribe`、不維護追蹤文檔、Guard 不套用記錄保護規則）。
 - `bookkeeping.timezone`：寫入記錄時間戳時所採用的 IANA 時區（如 `UTC` 或 `Asia/Taipei`）。
 - `review.policy`：審查觸發策略：`always`（每次實作後均審查）、`risk`（預設，僅在觸發風險時審查）、`never`（不審查，以測試作為唯一門檻）。

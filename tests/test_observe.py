@@ -80,16 +80,12 @@ def with_roles(project, **enabled):
     write_config(project, cfg)
 
 
-ROLE_CLAUSES = [
+@pytest.mark.parametrize("role,clause", [
     ("scout", "`scout` reads and compresses"),
-    ("architect", "`architect` discusses architecture"),
     ("builder", "`builder` implements"),
     ("reviewer", "`reviewer` checks risk work"),
     ("scribe", "`scribe` records"),
-]
-
-
-@pytest.mark.parametrize("role,clause", ROLE_CLAUSES)
+])
 def test_brief_omits_a_disabled_role(role, clause, project):
     with_roles(project, **{role: False})
     text = brief(project)
@@ -97,7 +93,12 @@ def test_brief_omits_a_disabled_role(role, clause, project):
     assert "`route:%s`" % role not in text
 
 
-@pytest.mark.parametrize("role,clause", ROLE_CLAUSES)
+@pytest.mark.parametrize("role,clause", [
+    ("scout", "`scout` reads and compresses"),
+    ("builder", "`builder` implements"),
+    ("reviewer", "`reviewer` checks risk work"),
+    ("scribe", "`scribe` records"),
+])
 def test_brief_names_every_role_by_default(role, clause, project):
     text = brief(project)
     assert clause in text
@@ -105,8 +106,7 @@ def test_brief_names_every_role_by_default(role, clause, project):
 
 
 def test_brief_drops_the_delegation_line_when_every_role_is_off(project):
-    with_roles(project, scout=False, architect=False, builder=False,
-               reviewer=False, scribe=False)
+    with_roles(project, scout=False, builder=False, reviewer=False, scribe=False)
     text = brief(project)
     assert "no route role is available" in text.lower()
     assert "Delegation is pre-authorized" not in text

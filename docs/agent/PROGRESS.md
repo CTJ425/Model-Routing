@@ -5,22 +5,6 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
-## 📅 Log: 2026-09-01 14:50:17 CST (0.10.0 — architect role: an opus tier above the builder)
-
-- **Changed**: route/agents/architect.md, route/hooks/_config.py, route/hooks/routing_guard.py, route/hooks/routing_observe.py, route/scripts/routing_doctor.py, route/schema/route.config.schema.json, route/skills/route/SKILL.md, route/commands/config.md, route/commands/init.md, route/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, README.md, tests/test_guard.py, tests/test_observe.py, tests/test_doctor.py
-- **Why**: the loop assumed the main session runs on the expensive model. SKILL.md Step 2 keeps specs, failing tests, and adjudication in the main session because that is where the expensive model sits. An `opusplan` session breaks that the moment the loop starts — Opus in plan mode, Sonnet after — and a session started on a mid tier never had it. Lane classification, spec authoring, the seven risk triggers, and adjudication then all run at the builder's tier, with no model above the builder anywhere in the execution loop. Routing ROI also falls: the saving is context replay at the Boss's input rate, Sonnet input is 2.5x cheaper than Opus, and the Step 0.25 dispatch floor is unchanged.
-- **What changed**: a fifth role, `architect`, on the `opus` tier (overridable via `models.architect`). It owns Lane 2 spec authoring plus the failing tests, root-cause analysis, review adjudication, and a `consult` mode: dispatched before any spec exists, it writes a `<task>-design.md` design note under `paths.specs` — options, a recommendation, open questions — that a human reads directly and answers through the caller with SendMessage, and only when the design is settled does it produce the spec. The guard scopes it to `spec` and `test` paths through Write/Edit and Bash alike; production code, records, and config are denied — the mirror of the rule the guard already applies to builder. `ROUTE_ROLES` widens to five, so `roles.architect.enabled`, the SessionStart roster, and `/route:doctor` pick it up with no further wiring.
-- **What did not change**: scout/builder/reviewer/scribe guard behaviour, the main-session rules, and the config deep-merge — every architect rule is gated on the role name. Adjudication still runs in the main session; a Sonnet Boss cannot delegate the loop state a ruling needs, so Step 5 gains an escalation path that dispatches architect to rule on a reviewer FAIL the Boss cannot, and SKILL.md tells a downgraded Boss to set `review.policy=always`.
-- **Deferred**: the pricing.json Sonnet 5 rate, a /route:doctor check on the session model, this repo's own review.policy, and a builder effort raise.
-- **Verify**: PASS — `python3 -m pytest tests/ -q` — 231 passed, 0 failed (was 212)
-- **Verify**: PASS — `python3 -m py_compile route/hooks/*.py route/scripts/*.py`
-- **Tests**: 231 passed, 0 failed (was 212). New: architect write/Bash scope, dispatch enable/disable, doctor five-tier report, roster clause, consult-mode design note path.
-- **Lint**: NOT RUN — project defines no lint command
-- **Review**: `route:reviewer` (sonnet) — PASS, no findings. Verified guard completeness (all non-spec/test classes denied, including uncategorized `other`), no regression to the other four roles, config plumbing has no KeyError path, new tests exercise real boundaries.
-- **Risks accepted**: none.
-
----
-
 ## 📅 Log: 2026-08-29 10:00:37 CST (0.9.0 — Bash writes get the same scope as file writes)
 
 - **Changed**: route/hooks/routing_guard.py, route/hooks/routing_observe.py,
@@ -76,3 +60,31 @@ Newest entry at the top, immediately after this header block. Older entries roll
   docs/handover-2026-08-27-scout-budget.md.
 
 ---
+
+## 📅 Log: 2026-08-27 14:29:18 CST (0.8.2 — size the scout dispatch to its 30-turn budget)
+
+- **Changed**: route/agents/scout.md, route/skills/route/SKILL.md, README.md, route/.claude-plugin/plugin.json
+- **Why**: `maxTurns: 30` was shipped in scout's frontmatter and documented nowhere, and the
+  config schema has no such key, so no consumer could see the ceiling or raise it. Nothing
+  told the caller how to size a dispatch against it, and scout itself had no instruction for
+  what to do as the budget ran out. Measured in a 2026-08-27 stock-pnl-web session: two
+  dispatches asking two focused questions each finished in 13 and 12 tool calls; one asking
+  four questions against a 4,095-line / 172 KB file was cut off at 36 and returned nothing
+  usable, so the caller paid for the reading and then did the trace itself. Scout has no
+  Bash, so every locate-then-read is two turns — the budget goes faster than it looks.
+- **What it now says**: SKILL.md Step 1 gets the caller-side rule (one question per dispatch,
+  split multi-part traces into parallel scouts, pass line ranges when known, resume a cut-off
+  scout with `SendMessage` rather than re-dispatching cold). scout.md gets the agent-side
+  rule: answer several questions in order and, when the budget looks tight, stop and report
+  with a `NOT ANSWERED:` line instead of spending the last turns still searching. README
+  Step 1 states the ceiling so it is visible without opening the frontmatter.
+- **Verify**: PASS — `python3 -m pytest tests/ -q` — 177 passed, 0 failed
+- **Verify**: PASS — `claude plugin validate ./route` — Validation passed
+- **Tests**: 177 passed, 0 failed (no test changes; the suite asserts on hook decisions, and
+  this release changes only agent and skill prose plus one version string)
+- **Lint**: NOT RUN — project defines no lint command
+- **Review**: not dispatched — prose and one version string, both gates green
+- **Accepted risk**: the ceiling itself is unchanged. A trace genuinely needing more than 30
+  turns still has no per-project escape; the remedy on offer is splitting the dispatch, not
+  raising the cap. If splitting proves insufficient in practice, the next step is exposing
+  `maxTurns` in route.config.schema.json, which this release does not do.

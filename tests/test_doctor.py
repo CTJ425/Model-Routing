@@ -41,14 +41,6 @@ def test_roles_check_reports_a_healthy_roster(project):
     assert "[PASS] roles" in run_doctor(project).stdout
 
 
-def test_models_check_reports_every_tier(project):
-    """The architect tier must appear alongside the original four."""
-    out = run_doctor(project).stdout
-    assert "[PASS] models" in out
-    for role in ("scout", "architect", "builder", "reviewer", "scribe"):
-        assert "%s=" % role in out
-
-
 def test_roles_check_warns_about_a_role_that_is_off(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
     cfg["roles"] = {"scribe": {"enabled": False}}

@@ -164,16 +164,15 @@ def check_models(cfg: dict) -> None:
               "so the configured tiers below are not in force." % override)
         return
     models = cfg.get("models") or {}
-    check("PASS", "models",
-          "scout=%s architect=%s builder=%s reviewer=%s scribe=%s." % (
-              models.get("scout"), models.get("architect"), models.get("builder"),
-              models.get("reviewer"), models.get("scribe")))
+    check("PASS", "models", "scout=%s builder=%s reviewer=%s scribe=%s." % (
+        models.get("scout"), models.get("builder"),
+        models.get("reviewer"), models.get("scribe")))
 
 
 def check_roles(cfg: dict) -> None:
     off = [r for r in ROUTE_ROLES if not role_enabled(cfg, r)]
     if not off:
-        check("PASS", "roles", "all five roles may be dispatched.")
+        check("PASS", "roles", "all four roles may be dispatched.")
         return
     # Off is a valid configuration, not a fault: report it so a denied dispatch is
     # never a surprise.

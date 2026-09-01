@@ -54,7 +54,6 @@
       "additionalProperties": false,
       "properties": {
         "scout": { "type": "string" },
-        "architect": { "type": "string" },
         "builder": { "type": "string" },
         "reviewer": { "type": "string" },
         "scribe": { "type": "string" }
@@ -99,7 +98,6 @@
       "additionalProperties": false,
       "properties": {
         "scout": { "$ref": "#/definitions/role" },
-        "architect": { "$ref": "#/definitions/role" },
         "builder": { "$ref": "#/definitions/role" },
         "reviewer": { "$ref": "#/definitions/role" },
         "scribe": { "$ref": "#/definitions/role" }

@@ -19,7 +19,7 @@ Report it as fact, not as a suggestion to unset it.
 
 ## Showing
 
-Print which of the five roles are on (`roles.<role>.enabled`, default true), the current
+Print which of the four roles are on (`roles.<role>.enabled`, default true), the current
 `models` mapping, `review.policy`, bookkeeping enabled/disabled state,
 `language.artifacts`, and any non-default `guard` values. Do not dump the whole file.
 
@@ -32,14 +32,14 @@ suggestion.
 Parse `$ARGUMENTS` as `key=value` pairs and update just those keys:
 
 - A bare role name is shorthand for the model tier: `builder=opus` sets
-  `models.builder`. Valid roles: `scout`, `architect`, `builder`, `reviewer`, `scribe`.
-  Any model alias or full model id is accepted — this file records the choice, it does
-  not validate it against a live model list.
+  `models.builder`. Valid roles: `scout`, `builder`, `reviewer`, `scribe`. Any model
+  alias or full model id is accepted — this file records the choice, it does not
+  validate it against a live model list.
 - A dotted key sets that path directly: `roles.scribe.enabled=false`,
   `review.policy=always`, `guard.readKB=64`, `guard.mainSeverity=deny`,
   `bookkeeping.enabled=false`, `audit.charsPerToken=1.6`. Coerce `true`/`false` and
   numeric values to their JSON types, not strings.
-- `roles.<role>.enabled=false` turns a role off for this project. All five roles may be
+- `roles.<role>.enabled=false` turns a role off for this project. All four roles may be
   turned off, `builder` included. Write `roles.scout.enabled` rather than the legacy
   `scout.enabled`; the old key still loads, and the new one wins when both are present.
   When turning a role off, state in one line what the loop does instead — this session
@@ -55,27 +55,25 @@ Parse `$ARGUMENTS` as `key=value` pairs and update just those keys:
 After showing the current values, drive the choice with `AskUserQuestion` instead of a
 free-form question:
 
-1. Ask which of the five roles to change, multi-select, one option per role:
+1. Ask which of the four roles to change, multi-select, one option per role:
    - `scout` — "reads and compresses"
-   - `architect` — "discusses architecture, writes the Lane 2 spec, root-causes hard bugs"
    - `builder` — "implements"
    - `reviewer` — "checks risk work"
    - `scribe` — "records outcomes"
-   Include a further option for settings that are not per-role: `guard.*` thresholds and
+   Include a fifth option for settings that are not per-role: `guard.*` thresholds and
    `language.artifacts`.
-2. For each role picked in step 1 (except when only the non-per-role option was picked),
-   ask its model tier in one follow-up question per role (batch into calls of at most 4
-   questions; make more than one call if the user picked more than 4 roles).
+2. For each role picked in step 1 (except when only the fifth option was picked), ask
+   its model tier in one follow-up question per role (or a single call with one question
+   per role, up to the 4-question limit).
 3. For each role picked, ask whether the role is on or off → writes
    `roles.<role>.enabled`. Off means the guard denies the dispatch, so name what absorbs
-   the work: for `architect`, `builder` and `reviewer` that is this session; for
-   `scribe`, this session writes the records unless the user also wants
-   `bookkeeping.enabled=false`; for `scout`, discovery happens in this session under the
-   `guard.readKB` ceiling.
+   the work: for `builder` and `reviewer` that is this session; for `scribe`, this
+   session writes the records unless the user also wants `bookkeeping.enabled=false`;
+   for `scout`, discovery happens in this session under the `guard.readKB` ceiling.
    For `reviewer`, also ask its policy always/risk/never → writes `review.policy`. That
    is a separate axis: `never` means review is not required, while
    `roles.reviewer.enabled=false` means the reviewer cannot run at all.
-4. If the non-per-role option was picked, ask for the specific `guard.*` key/value or
+4. If the fifth option was picked, ask for the specific `guard.*` key/value or
    `language.artifacts` value.
 
 Write back only the keys the user actually changed; every other key stays byte-identical,
