@@ -114,7 +114,7 @@ when you need a tool scout lacks.
 Scout has no Bash. If the material to compress is command output, put the text in the
 dispatch prompt or write it to a file and give scout the path.
 
-**Size the dispatch to scout's turn budget: 30, and it cannot be raised per project.**
+**Size the dispatch to scout's turn budget: 40, and it cannot be raised per project.**
 `maxTurns` lives in the agent frontmatter and the config schema has no such key. Because
 scout has no Bash, it cannot chain `grep -n X -A 20` in one shell call — every
 locate-then-read is two turns. Measured on a stock-pnl-web session: two dispatches asking
@@ -124,6 +124,9 @@ caller paid for the reading twice.
 
 - **One question per dispatch.** Split a multi-part trace into parallel scouts, one
   question each, rather than stacking them into one prompt.
+- **Bound the search space in the prompt.** Name the directories or globs scout may look
+  in. An unbounded question turns the budget into a repository-wide sweep: capped scout
+  runs averaged 16 reads and 14 greps, which is a search, not a map.
 - **Give line ranges when you already know them.** Turning a search into a read is the
   difference between ~30 turns and ~4. An earlier scout's answer usually hands you the
   range for the next one.
@@ -190,6 +193,10 @@ anything outside the repository. `mkdir`, `mv` and `rm` inside the production pa
 allowed, because no file tool expresses them; a write-shaped command the guard cannot
 resolve to a literal path is denied. If builder reports a Bash denial as a blocker, check
 the target against `paths.prod` before assuming the spec is at fault.
+
+Builder runs `Verify` at most three times and then reports. A `VERIFY: BLOCKED` after three
+runs is a converged answer, not a truncated one — adjudicate it in Step 5 rather than
+re-dispatching the same brief.
 
 Independent tasks may go out as parallel `route:builder` calls only when their `Files` lists
 are disjoint and they do not share generated state. Otherwise dispatch them sequentially;
@@ -308,6 +315,13 @@ never happened. It keeps the file surgery either way, which is the part that act
 replaces main-session turns. The arithmetic favours writing it: a page of prose from this
 session costs a fraction of one main turn, while one correction round-trip costs several
 *and* the prose still has to be written.
+
+**Name every destination path; scribe does not search.** Give the exact file to write, the
+exact heading or anchor line to write against, and for a move the exact entry headings and
+the `--keep` value for `roll_records.py`. Scribe is forbidden to discover any of that
+itself. Measured across capped scribe runs, the budget went on `grep -n` / `sed -n` /
+`wc -l` anchoring — work the caller already knows the answer to, done again at the wrong
+end of the dispatch.
 
 **Cap a dispatch at two tracking files.** A brief spanning every record drives scribe into
 its turn ceiling, and each resume replays the whole context again. Two smaller dispatches

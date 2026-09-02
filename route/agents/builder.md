@@ -3,7 +3,7 @@ name: builder
 description: Use to implement a task that has either an inline brief or a written spec. Requires an exhaustive Files list and an exact Verify command. Returns a bounded implementation report and never changes tests, specs, or tracking records.
 model: sonnet
 effort: high
-maxTurns: 60
+maxTurns: 80
 tools: Read, Glob, Grep, Write, Edit, Bash
 ---
 
@@ -45,6 +45,11 @@ Concretely:
   flags to the `Verify` command. If the literal command fails, report `VERIFY: BLOCKED` (or `FAIL`)
   with the exact output and hypothesis. Any belief that failures are pre-existing belongs
   under `BLOCKERS`, never in a modified `VERIFY` line.
+- **Run `Verify` at most three times in a dispatch.** Once for the baseline, then once
+  after each of at most two fix attempts. A third red result is a report, not a fourth
+  attempt: quote the exact output under `BLOCKERS` and stop. Measured on capped builder
+  runs, the verify loop was the single largest consumer of the turn budget — 4.5 test
+  invocations per run — and a loop that has not converged in two fixes is not converging.
 - **Never read a large file whole.** Locate with `Grep` first, then read with an
   explicit `limit`/`offset` rather than the whole file. If a read comes back truncated,
   say so and name what was not covered before editing it.
@@ -61,7 +66,9 @@ disagreement to the `## Blockers` section of your report. You do not act on it.
 3. Implement the minimum that makes it pass.
 4. Run the `Verify` command again verbatim. Run a linter only when the brief or spec names its
    exact command; do not invent one.
-5. Report.
+5. If `Verify` is still red, fix once more and run it a third and final time. Still red is
+   `VERIFY: BLOCKED`.
+6. Report.
 
 **Done means the final verbatim `Verify` command passes.** Quote the exact command and its
 result line in your report. Never report `VERIFY: PASS` against a modified command. A task whose

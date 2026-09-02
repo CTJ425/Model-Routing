@@ -5,10 +5,10 @@
 | 角色 (Role) | 執行位置 | 預設模型與 Effort | 負責範疇 (Owns) | 絕對禁止 (Must Never) |
 |---|---|---|---|---|
 | **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 路由分級、順序排定、規格/簡報撰寫、結果裁決 | 撰寫生產程式碼、直接編輯追蹤記錄 |
-| **scout** | 子代理人 (Subagent) | `haiku` (low effort, 30 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
-| **builder** | 子代理人 (Subagent) | `sonnet` (high effort, 60 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
+| **scout** | 子代理人 (Subagent) | `haiku` (low effort, 40 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
+| **builder** | 子代理人 (Subagent) | `sonnet` (high effort, 80 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
 | **reviewer** | 子代理人 (Subagent) | `sonnet` (high effort, 40 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
-| **scribe** | 子代理人 (Subagent) | `haiku` (low effort) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
+| **scribe** | 子代理人 (Subagent) | `haiku` (low effort, 45 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
 
 角色權限邊界透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
 
@@ -107,7 +107,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 
 2. **Step 1 — 程式碼拓撲繪製 (`scout` | Haiku 預設，Low Effort)**：
    - 僅在目標區域尚未探索時分派。執行唯讀掃描，回傳約 40 行的結構化地圖摘要。
-   - **預算規範**：預設上限 `maxTurns: 30`（不支援專案自訂覆寫）。每次分派請給予**單一明確問題**並在已知時提供行號範圍；若在單次提示中堆疊多個跨大檔案的問題，將耗盡 30 回合預算而無法回傳可用資訊。若預算不足，Scout 會遵循優雅降級協議，以 `NOT ANSWERED:` 明列未完部分，呼叫端可透過 `SendMessage` 恢復會話續問。
+   - **預算規範**：預設上限 `maxTurns: 40`（不支援專案自訂覆寫）。每次分派請給予**單一明確問題**並在已知時提供行號範圍；若在單次提示中堆疊多個跨大檔案的問題，將耗盡 40 回合預算而無法回傳可用資訊。若預算不足，Scout 會遵循優雅降級協議，以 `NOT ANSWERED:` 明列未完部分，呼叫端可透過 `SendMessage` 恢復會話續問。
 
 3. **Step 2 — 規格與簡報撰寫 (`Boss` | Session 模型)**：
    - 高階模型撰寫任務契約、完整 `Files` 異動檔案清單、精確的 `Verify` 驗證指令與 `Non-goals`（非目標）。Boss 絕對不直接編寫生產代碼。

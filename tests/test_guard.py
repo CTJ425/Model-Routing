@@ -558,6 +558,10 @@ def test_builder_bash_write_inside_prod_is_allowed(command, project):
     "rm docs/agent/TASK.md",
     "mv src/a.ts docs/agent/a.md",        # one target in scope, one outside: still denied
     "echo done > result.txt",
+    # A chain is resolved segment by segment, so an out-of-scope target in the second
+    # segment is named as one instead of hiding behind "cannot resolve".
+    "echo a > src/a.ts; rm -rf tests",
+    "echo hi\nrm -rf tests",
 ])
 def test_builder_bash_write_outside_prod_is_denied(command, project):
     got = bash("route:builder", command, project)
@@ -568,16 +572,61 @@ def test_builder_bash_write_outside_prod_is_denied(command, project):
 @pytest.mark.parametrize("command", [
     "cat x | tee src/a.ts",               # a pipe can hide a second target
     "dd of=src/a.ts",                     # operand shape this grammar does not cover
-    "echo a > src/a.ts; rm -rf tests",    # a chain is not one command
-    "echo hi\nrm -rf tests",              # a second line with no heredoc opener above it
     "cat > $OUT",                         # a variable is not a literal path
     "mv src/*.ts src/sub/",               # nor is an unexpanded glob
+    "npm test > `cat where.txt`",         # nor does a backtick resolve
+    "npm test > $(cat where.txt)",
+    "npm test > out.log &",               # a background `&` is not a redirect
+    "cd /elsewhere && cat > a.ts",        # a relative path past a `cd` is not this repo's
+    "cat > src/a.ts <<'EOF'\nunterminated",
 ])
 def test_builder_bash_unresolvable_target_is_denied(command, project):
     """Resolution fails in one direction only: unknown is denied, never allowed."""
     got = bash("route:builder", command, project)
     assert decision(got) == "deny"
     assert "cannot resolve" in reason(got)
+
+
+# --- the verify command's own shape. 71% of builder's measured Bash denials were writes
+# to /tmp or the session scratchpad -- inside its scope by the same rule as Write/Edit,
+# and denied only because `2>&1`, a `;` or a second line made the command "unresolvable".
+
+@pytest.mark.parametrize("command", [
+    "npx vitest run > /tmp/route-out.log 2>&1",
+    'npx vitest run > /tmp/route-out.log 2>&1; echo "EXIT:$?"',
+    'npm run build > /tmp/b.log 2>&1; echo "EXIT:$?"; tail -20 /tmp/b.log',
+    "cd /elsewhere && npx vitest run > /tmp/route-out.log 2>&1",
+    "mkdir -p /tmp/route-scratch\ncat > /tmp/route-scratch/f.ts <<'EOF'\nconst a = 1;\nEOF",
+    "npm test &> /tmp/route-out.log",
+    "mkdir -p src/newmod && cat > src/newmod/a.ts <<'EOF'\nx\nEOF",
+])
+def test_builder_bash_chained_verify_shapes_are_allowed(command, project):
+    assert decision(bash("route:builder", command, project)) is None
+
+
+# --- worktree paths ---
+# A worktree session keeps CLAUDE_PROJECT_DIR on the main repo, so every path inside it
+# arrived as `.claude/worktrees/<name>/...` and classified as `config`: scribe could not
+# write a single record and builder could not touch a source file, for the whole session.
+
+@pytest.mark.parametrize("role,path,want", [
+    ("route:scribe", ".claude/worktrees/wt/docs/agent/TASK.md", None),
+    ("route:scribe", ".claude/worktrees/wt/src/a.ts", "deny"),
+    ("route:builder", ".claude/worktrees/wt/src/a.ts", None),
+    ("route:builder", ".claude/worktrees/wt/docs/agent/TASK.md", "deny"),
+    ("main", ".claude/worktrees/wt/src/a.ts", "ask"),
+    # The real .claude/ tree is still config, and still denied.
+    ("route:scribe", ".claude/route.config.json", "deny"),
+    ("route:builder", ".claude/worktrees/wt", "deny"),
+])
+def test_worktree_paths_classify_as_the_tree_below_them(role, path, want, project):
+    assert decision(write(role, path, project)) == want
+
+
+def test_scribe_bash_append_inside_a_worktree_is_allowed(project):
+    command = ("cat >> .claude/worktrees/wt/docs/agent/PROGRESS.md <<'EOF'\n"
+               "- done\nEOF")
+    assert decision(bash("route:scribe", command, project)) is None
 
 
 # --- the main-session nudge applies through the shell too ---

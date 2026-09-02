@@ -150,6 +150,23 @@ def role_enabled(cfg: dict, role) -> bool:
     return bool(entry.get("enabled", True))
 
 
+WORKTREE_RE = re.compile(r"^\.claude/worktrees/[^/]+/")
+
+
+def strip_worktree(rel):
+    """-> rel with a leading `.claude/worktrees/<name>/` removed.
+
+    A worktree session keeps CLAUDE_PROJECT_DIR on the main repo, so every path inside
+    the worktree arrives as `.claude/worktrees/<name>/...`. Classified literally that is
+    `config`, which denies scribe every tracking record and builder every source file —
+    the whole session, not a nudge. The tree below the prefix is the same repo layout,
+    so it is classified as that layout.
+    """
+    if rel is None:
+        return None
+    return WORKTREE_RE.sub("", rel, count=1)
+
+
 def rel_path(target: str, project: str):
     """-> repo-relative POSIX path, or None when the target is outside the project."""
     if not target:

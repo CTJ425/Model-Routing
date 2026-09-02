@@ -45,7 +45,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import (  # noqa: E402
     ROUTE_ROLES, archive_paths, load_config, matches_any, normalize_role, project_dir,
-    record_paths, rel_path, role_enabled,
+    record_paths, rel_path, role_enabled, strip_worktree,
 )
 
 READ_ONLY_ROLES = {"scout", "reviewer"}
@@ -177,8 +177,21 @@ def _scribe_redirect_target(command: str):
 # None, which callers read as "unknown", never as "safe". A chain operator, a command
 # substitution, or a second line without a heredoc opener could each hide a target this
 # grammar never sees, so any of them disqualifies the whole command.
-_SHELL_CHAIN_RE = re.compile(r"[|;&`]|\$\(")
 _REDIRECT_TARGET_RE = re.compile(r"(?<![0-9<>])>>?[ \t]*([^\s|;&<>()]+)")
+# A heredoc body is data, wherever in the command it opens. Parsing it for targets, or
+# reading its lines as further commands, is what limited resolution to a single line.
+_HEREDOC_OPENER_RE = re.compile(
+    r"<<-?[ \t]*(?:'([^'\n]*)'|\"([^\"\n]*)\"|([A-Za-z_][A-Za-z0-9_]*))")
+# `2>&1` and `>&2` duplicate a file descriptor. Neither writes to a path, and the `&` in
+# them is not a chain operator -- read as one, it made `cmd > file 2>&1` unresolvable,
+# which is the shape of every verify command builder runs.
+_FD_DUP_RE = re.compile(r"\d*>&\d+")
+# Separators this grammar resolves segment by segment.
+_SEGMENT_SPLIT_RE = re.compile(r"&&|\|\||;|\n")
+# What is left after splitting and still hides a target: a pipe (`tee`), a background
+# `&`, a backtick or a command substitution. Any of them disqualifies the whole command.
+_OPAQUE_RE = re.compile(r"[|`&]|\$\(")
+_CD_RE = re.compile(r"^(?:sudo[ \t]+)?cd(?:[ \t]|$)")
 # A target carrying a variable, a glob, or a brace is not the path that will be written.
 # Resolving it as a literal would classify the wrong path and report the wrong reason.
 _NON_LITERAL_RE = re.compile(r"[$*?~{}\[\]]")
@@ -192,22 +205,57 @@ _INPLACE_EDIT_RE = re.compile(
     r"^(?:sudo[ \t]+)?(?:sed|perl|ruby)\b(?=.*[ \t]-i)(.*)$")
 
 
+def _strip_heredoc_bodies(command: str):
+    """-> the command's code lines with every heredoc body dropped, or None when an
+    opener has no terminator. Runs on the raw command: `_strip_quoted_spans` blanks a
+    quoted delimiter, and the delimiter is what finds the end of the body."""
+    lines = command.split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        i += 1
+        for m in _HEREDOC_OPENER_RE.finditer(line):
+            delimiter = m.group(1) or m.group(2) or m.group(3)
+            while i < len(lines) and lines[i].strip() != delimiter:
+                i += 1
+            if i >= len(lines):
+                return None          # unterminated: the shape is not resolvable
+            i += 1                   # the terminator line is not code either
+    return out
+
+
 def _write_targets(command: str):
     """-> the literal paths this command appears to write, or None when the shape cannot
-    be resolved. None means unknown, not safe."""
-    scan = _strip_quoted_spans(command)
-    head, _, body = scan.partition("\n")
-    # A heredoc body is data. A second line with no heredoc opener above it is a second
-    # command, which this single-command grammar does not cover.
-    if body and "<<" not in head:
+    be resolved. None means unknown, not safe.
+
+    Resolution is segment by segment. A chained command is not one target the guard
+    cannot see; it is several it can, and denying the whole shape denied builder the
+    scratchpad its own scope allows -- measured as 71% of its Bash denials.
+    """
+    lines = _strip_heredoc_bodies(command)
+    if lines is None:
         return None
-    if _SHELL_CHAIN_RE.search(head):
-        return None
-    targets = [m.group(1) for m in _REDIRECT_TARGET_RE.finditer(head)]
-    stripped = head.strip()
-    operands = _WRITE_VERB_RE.match(stripped) or _INPLACE_EDIT_RE.match(stripped)
-    if operands:
-        targets += [t for t in operands.group(1).split() if not t.startswith("-")]
+    scan = _strip_quoted_spans("\n".join(lines))
+    scan = _FD_DUP_RE.sub(" ", scan).replace("&>", ">")
+    targets, cwd_moved = [], False
+    for segment in _SEGMENT_SPLIT_RE.split(scan):
+        segment = segment.strip()
+        if not segment:
+            continue
+        if _OPAQUE_RE.search(segment):
+            return None
+        if _CD_RE.match(segment):
+            cwd_moved = True
+            continue
+        found = [m.group(1) for m in _REDIRECT_TARGET_RE.finditer(segment)]
+        operands = _WRITE_VERB_RE.match(segment) or _INPLACE_EDIT_RE.match(segment)
+        if operands:
+            found += [t for t in operands.group(1).split() if not t.startswith("-")]
+        # Past a `cd`, a relative path no longer resolves against the project root.
+        if cwd_moved and any(not t.startswith("/") for t in found):
+            return None
+        targets += found
     if any(_NON_LITERAL_RE.search(t) for t in targets):
         return None
     return targets or None
@@ -282,6 +330,7 @@ def main_severity(cfg) -> str:
 def classify(rel, cfg) -> str:
     if rel is None:
         return "outside"
+    rel = strip_worktree(rel)
     paths = cfg["paths"]
     specs = (paths.get("specs") or "").strip("/")
     docs = (paths.get("docs") or "").strip("/")
@@ -381,6 +430,7 @@ def handle_read(role, tool_input, project, cfg) -> None:
     # impossible and the Bash heredoc append as the only route — and `>>` appends, while a
     # newest-first archive needs a prepend. Reading a header to anchor an Edit is the
     # bounded retrieval this guard exists to encourage; only the whole-file read is refused.
+    rel = strip_worktree(rel)
     if (role == "scribe" and rel and rel in archive_paths(cfg)
             and not tool_input.get("limit")):
         respond("deny", "[routing/scribe] " + ARCHIVE_REASON.format(name=rel))
@@ -411,16 +461,15 @@ def _scribe_redirect_in_scope(command: str, project: str, cfg: dict) -> bool:
     target = _scribe_redirect_target(command)
     if target is None:
         return False
-    if any(part == ".." for part in target.split("/")):
-        return False
     docs = (cfg["paths"].get("docs") or "").strip("/")
     if not docs or docs == ".":
         return False
-    project_real = os.path.realpath(project)
-    docs_real = os.path.realpath(os.path.join(project_real, docs))
-    target_abs = target if os.path.isabs(target) else os.path.join(project, target)
-    target_real = os.path.realpath(target_abs)
-    return target_real == docs_real or target_real.startswith(docs_real + os.sep)
+    # rel_path realpaths both ends and returns None for anything outside the project,
+    # which covers the `..` escape; strip_worktree keeps a worktree's docs tree in scope.
+    rel = strip_worktree(rel_path(target, project))
+    if rel is None:
+        return False
+    return rel == docs or rel.startswith(docs + "/")
 
 
 def handle_main_bash(command, project, cfg) -> None:
@@ -507,8 +556,9 @@ def handle_write(role, tool_input, project, cfg) -> None:
 
     docs = (cfg["paths"].get("docs") or "").strip("/")
     if role == "scribe":
+        rel_in_tree = strip_worktree(rel)
         in_docs = bool(docs and docs != "." and
-                       (rel == docs or rel.startswith(docs + "/")))
+                       (rel_in_tree == docs or rel_in_tree.startswith(docs + "/")))
         if not in_docs or cls in ("prod", "test", "spec", "config"):
             respond("deny", "[routing/scribe] Scribe may write only inside %s/." %
                     (docs or "the configured tracking directory"))

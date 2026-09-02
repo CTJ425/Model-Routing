@@ -5,6 +5,56 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
+## 📅 Log: 2026-09-02 22:28:43 CST (0.9.2 — turn budgets sized from measurement, and the guard stops denying the verify command)
+
+- **Changed**: route/agents/scout.md, route/agents/builder.md, route/agents/scribe.md,
+  route/skills/route/SKILL.md, route/hooks/routing_guard.py, route/hooks/_config.py,
+  README.md, route/.claude-plugin/plugin.json, tests/test_guard.py
+- **Why**: 463 subagent runs across five projects were measured from
+  `.claude/routing/dispatch.jsonl` joined to the agent transcripts, counting one turn per
+  distinct `requestId`. Every role's maximum equals its cap exactly and none exceeds it,
+  so the distributions are censored, not merely tight: scribe hit 30 on 14 of 124 runs
+  (11.3%, p90 and p95 both pinned at 30), builder hit 60 on 6 of 150, scout hit 30 on 4 of
+  103. reviewer never reached 40 (max 38). Only about a third of capped runs were resumed;
+  the rest returned a partial result the caller absorbed silently. A cap is a stop, not a
+  budget — unused headroom costs nothing, while hitting one costs a re-dispatch that
+  replays the whole brief.
+- **What changed (budgets)**: scout 30 → 40, scribe 30 → 45, builder 60 → 80.
+  reviewer stays at 40. The hardcoded budget in scout.md, SKILL.md Step 1 and the README
+  role table are updated with them.
+- **What changed (work shape)**: the numbers were the symptom. Capped scribe runs spent
+  15.4 Bash + 8.7 Read + 7.5 Edit calls each on `grep -n` / `sed -n` / `wc -l` anchoring,
+  so `roll_records.py` is now the required path for a move rather than an option, scribe is
+  forbidden to discover a destination it was not given, and SKILL.md Step 6 must name every
+  path, anchor and `--keep` value. Capped builder runs averaged 4.5 invocations of the
+  Verify command, so builder now runs it at most three times and reports `VERIFY: BLOCKED`.
+  Capped scout runs averaged 16 reads and 14 greps, so Step 1 must bound the search space.
+- **What changed (guard)**: `_write_targets` resolved a single line only. `_SHELL_CHAIN_RE`
+  matched the `&` inside `2>&1`, so `npx vitest run > <scratchpad>/out.log 2>&1` — the
+  shape of every verify command builder runs — was denied as an unresolvable write. 17 of
+  the 24 recoverable builder Bash denials (71%) were writes to `/tmp` or the session
+  scratchpad, which builder's scope allows by the same rule as Write/Edit. Resolution is now
+  segment by segment: heredoc bodies are dropped wherever they open, file-descriptor
+  duplication is not read as a chain, and `;`/`&&`/`||`/newline split the command. A pipe, a
+  background `&`, a backtick, a command substitution, a non-literal target, or a relative
+  path past a `cd` still return unknown, which still denies.
+- **Also (guard)**: a worktree session keeps `CLAUDE_PROJECT_DIR` on the main repo, so every
+  path under `.claude/worktrees/<name>/` classified as `config` — scribe could not write a
+  single tracking record and builder could not touch a source file, for the whole session
+  (6 denials observed in one session). `strip_worktree` normalises the prefix away before
+  classification, in `classify`, the scribe archive read, the scribe docs check and the
+  scribe append grammar. The real `.claude/` tree is unaffected.
+- **Verify**: PASS — `python3 -m pytest -q` — 232 passed, 0 failed (was 212)
+- **Verify**: PASS — `claude plugin validate ./route` — Validation passed
+- **Tests**: 232 passed (+20). Two existing cases moved from
+  `test_builder_bash_unresolvable_target_is_denied` to
+  `test_builder_bash_write_outside_prod_is_denied`: `echo a > src/a.ts; rm -rf tests` and
+  `echo hi\nrm -rf tests` are still denied, now naming the out-of-scope target instead of
+  reporting the shape as unresolvable.
+- **Routing**: none. Handled entirely in the main session at the user's instruction.
+
+---
+
 ## 📅 Log: 2026-08-29 10:00:37 CST (0.9.0 — Bash writes get the same scope as file writes)
 
 - **Changed**: route/hooks/routing_guard.py, route/hooks/routing_observe.py,
@@ -58,33 +108,3 @@ Newest entry at the top, immediately after this header block. Older entries roll
   measurement counted 36 tool calls against a documented ceiling of 30, which reconciles
   only if a turn can carry several tool calls. Unchanged by this release; see A2 in
   docs/handover-2026-08-27-scout-budget.md.
-
----
-
-## 📅 Log: 2026-08-27 14:29:18 CST (0.8.2 — size the scout dispatch to its 30-turn budget)
-
-- **Changed**: route/agents/scout.md, route/skills/route/SKILL.md, README.md, route/.claude-plugin/plugin.json
-- **Why**: `maxTurns: 30` was shipped in scout's frontmatter and documented nowhere, and the
-  config schema has no such key, so no consumer could see the ceiling or raise it. Nothing
-  told the caller how to size a dispatch against it, and scout itself had no instruction for
-  what to do as the budget ran out. Measured in a 2026-08-27 stock-pnl-web session: two
-  dispatches asking two focused questions each finished in 13 and 12 tool calls; one asking
-  four questions against a 4,095-line / 172 KB file was cut off at 36 and returned nothing
-  usable, so the caller paid for the reading and then did the trace itself. Scout has no
-  Bash, so every locate-then-read is two turns — the budget goes faster than it looks.
-- **What it now says**: SKILL.md Step 1 gets the caller-side rule (one question per dispatch,
-  split multi-part traces into parallel scouts, pass line ranges when known, resume a cut-off
-  scout with `SendMessage` rather than re-dispatching cold). scout.md gets the agent-side
-  rule: answer several questions in order and, when the budget looks tight, stop and report
-  with a `NOT ANSWERED:` line instead of spending the last turns still searching. README
-  Step 1 states the ceiling so it is visible without opening the frontmatter.
-- **Verify**: PASS — `python3 -m pytest tests/ -q` — 177 passed, 0 failed
-- **Verify**: PASS — `claude plugin validate ./route` — Validation passed
-- **Tests**: 177 passed, 0 failed (no test changes; the suite asserts on hook decisions, and
-  this release changes only agent and skill prose plus one version string)
-- **Lint**: NOT RUN — project defines no lint command
-- **Review**: not dispatched — prose and one version string, both gates green
-- **Accepted risk**: the ceiling itself is unchanged. A trace genuinely needing more than 30
-  turns still has no per-project escape; the remedy on offer is splitting the dispatch, not
-  raising the cap. If splitting proves insufficient in practice, the next step is exposing
-  `maxTurns` in route.config.schema.json, which this release does not do.
