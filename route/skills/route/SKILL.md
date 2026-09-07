@@ -114,7 +114,7 @@ when you need a tool scout lacks.
 Scout has no Bash. If the material to compress is command output, put the text in the
 dispatch prompt or write it to a file and give scout the path.
 
-**Size the dispatch to scout's turn budget: 40, and it cannot be raised per project.**
+**Size the dispatch to scout's turn budget: 80, and it cannot be raised per project.**
 `maxTurns` lives in the agent frontmatter and the config schema has no such key. Because
 scout has no Bash, it cannot chain `grep -n X -A 20` in one shell call — every
 locate-then-read is two turns. Measured on a stock-pnl-web session: two dispatches asking

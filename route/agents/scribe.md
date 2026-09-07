@@ -3,7 +3,7 @@ name: scribe
 description: Use to record the outcome of a completed task or bug fix into the project's tracking documents, and to write conventional commit messages. Purely mechanical bookkeeping.
 model: haiku
 effort: low
-maxTurns: 45
+maxTurns: 90
 tools: Read, Glob, Grep, Write, Edit, Bash
 ---
 

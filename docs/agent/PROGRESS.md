@@ -5,6 +5,30 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
+## 📅 Log: 2026-09-07 16:58:14 CST (0.9.3 — turn budgets raised out of the working range)
+
+- **Changed**: route/agents/scout.md, route/agents/reviewer.md, route/agents/scribe.md,
+  route/agents/builder.md, route/skills/route/SKILL.md, README.md,
+  route/.claude-plugin/plugin.json, .claude/version.config.json, docs/CHANGELOG.md
+- **Why**: user decision. 0.9.2 raised every cap from measured data and stated the
+  principle behind it — a cap is a stop, not a budget; unused headroom costs nothing,
+  hitting one costs a re-dispatch that replays the whole brief. This release applies that
+  principle further, so a capped run is an anomaly to investigate rather than a routine
+  cost the caller absorbs silently.
+- **What changed (budgets)**: scout 40 → 80, reviewer 40 → 80, scribe 45 → 90,
+  builder 80 → 240. The hardcoded scout budget in scout.md, SKILL.md Step 1 and the
+  README role table follow the new number.
+- **Not changed**: guard behaviour, role scopes, model tiers, the degradation protocol
+  (`NOT ANSWERED:`, `VERIFY: BLOCKED`), and scout's 40-line output ceiling — an output
+  limit, not a turn budget.
+- **Housekeeping**: `.claude/version.config.json` and `docs/CHANGELOG.md` were collateral
+  losses of the b468865 architect rollback, which reverted the whole 0.10.0 commit pair.
+  Both are restored; the CHANGELOG drops the reverted 0.10.0 section and gains the 0.9.2
+  entry it never received. The local `v0.10.0` tag was never pushed and has no Release.
+- **Tests**: 232 passed, 0 failed.
+
+---
+
 ## 📅 Log: 2026-09-02 22:28:43 CST (0.9.2 — turn budgets sized from measurement, and the guard stops denying the verify command)
 
 - **Changed**: route/agents/scout.md, route/agents/builder.md, route/agents/scribe.md,
