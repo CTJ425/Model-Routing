@@ -24,7 +24,9 @@ Newest entry at the top, immediately after this header block. Older entries roll
 - **Housekeeping**: `.claude/version.config.json` and `docs/CHANGELOG.md` were collateral
   losses of the b468865 architect rollback, which reverted the whole 0.10.0 commit pair.
   Both are restored; the CHANGELOG drops the reverted 0.10.0 section and gains the 0.9.2
-  entry it never received. The local `v0.10.0` tag was never pushed and has no Release.
+  entry it never received. The `v0.10.0` tag pointed at that reverted work and had no
+  Release; it is deleted from the local repo, from `origin`, and from its stale plugin
+  install cache under `~/.claude/plugins/cache/`.
 - **Tests**: 232 passed, 0 failed.
 
 ---
