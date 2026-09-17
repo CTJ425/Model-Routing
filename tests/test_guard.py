@@ -10,7 +10,7 @@ import pytest
 
 from conftest import BASE_CONFIG, write_config
 from helpers import decision, reason, run_guard
-from _config import rel_path
+from _config import rel_path, route_role
 
 
 def write(role, path, project, **tool_input):
@@ -314,6 +314,32 @@ def test_roles_key_outranks_the_legacy_scout_key(project):
 def test_an_agent_this_plugin_does_not_own_is_not_switched_off(project):
     with_roles(project, builder=False)
     assert decision(dispatch("statusline-setup", project)) is None
+
+
+@pytest.mark.parametrize("spawned", ["route:sub:builder", "Route:Builder", " route:builder "])
+def test_disabled_role_is_denied_under_every_spelling_of_our_namespace(spawned, project):
+    with_roles(project, builder=False)
+    assert decision(dispatch(spawned, project)) == "deny"
+
+
+@pytest.mark.parametrize("spawned", ["other:builder", "other:sub:builder"])
+def test_another_plugins_agent_sharing_a_role_name_is_not_switched_off(spawned, project):
+    """Only our namespace, or none, names a route role."""
+    with_roles(project, builder=False)
+    assert decision(dispatch(spawned, project)) is None
+
+
+@pytest.mark.parametrize("raw,want", [
+    ("builder", "builder"),
+    ("route:builder", "builder"),
+    ("route:sub:builder", "builder"),
+    ("other:builder", None),
+    ("Explore", None),
+    ("", None),
+    (None, None),
+])
+def test_route_role(raw, want):
+    assert route_role(raw) == want
 
 
 def test_discovery_reason_drops_scout_when_disabled(project):

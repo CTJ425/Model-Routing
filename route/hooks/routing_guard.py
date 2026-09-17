@@ -44,8 +44,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import (  # noqa: E402
-    ROUTE_ROLES, archive_paths, load_config, matches_any, normalize_role, project_dir,
-    record_paths, rel_path, role_enabled, strip_worktree,
+    archive_paths, load_config, matches_any, normalize_role, project_dir,
+    record_paths, rel_path, role_enabled, route_role, strip_worktree,
 )
 
 READ_ONLY_ROLES = {"scout", "reviewer"}
@@ -423,10 +423,10 @@ def now_in_timezone(name: str):
 
 def handle_dispatch(role, tool_input, cfg) -> None:
     spawned = (tool_input.get("subagent_type") or "").strip()
-    spawned_role = normalize_role(spawned)
+    spawned_role = route_role(spawned)
     # A disabled role is a deny, not an ask: confirming cannot supply what is missing,
     # and a role nobody may dispatch is the whole point of turning one off.
-    if spawned_role in ROUTE_ROLES and not role_enabled(cfg, spawned_role):
+    if spawned_role and not role_enabled(cfg, spawned_role):
         respond("deny", "[routing/%s] " % role + DISABLED_ROLE_REASON.format(
             name=spawned or spawned_role, role=spawned_role))
     name = spawned or DEFAULT_AGENT

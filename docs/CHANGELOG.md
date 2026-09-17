@@ -41,14 +41,26 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
   grows the context by the prompt alone.
 - `SKILL.md` Step 1 and `scout.md` no longer say a subagent cut at `maxTurns` returns
   nothing: since 2.1.246 its output comes back marked partial.
+- Turning a role off no longer blocks another plugin's agent that shares the name.
+  `roles.builder.enabled=false` denied `other:builder` too, because the namespace was
+  stripped whatever it was. Only `route:<role>`, `route:<dir>:<role>` and the bare name
+  count now. The review nudge uses the same rule, so `other:builder` returning is silent.
+- `/route:doctor` fails the `roles` check on a switch the hooks cannot read as written:
+  a non-boolean `enabled` (`"false"` leaves the role on), a role entry or `roles` block
+  that is not an object, an unknown key inside a role entry, an unknown role name, and a
+  non-boolean legacy `scout.enabled`. Each line says whether the role is actually on or
+  off. It used to report "all four roles may be dispatched" while the file read as off.
+- A `roles` value that is not an object no longer crashes the hooks. The session brief
+  was lost with it; the guard failed open, as it still does.
 
 ### Unchanged
 
-Role scopes, write rules, model tiers, turn budgets, and every Bash rule.
+Role scopes, write rules, model tiers, turn budgets, and every Bash rule. The calling
+role is still matched with the namespace stripped, so write rules are unchanged.
 
 ### Tests
 
-254 passed (was 232).
+278 passed (was 232).
 
 ## [0.9.3] - 2026-09-07
 

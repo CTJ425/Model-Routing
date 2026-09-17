@@ -39,7 +39,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import (  # noqa: E402
     DEFAULT_REVIEW_TRIGGERS, ROUTE_ROLES, load_config, normalize_role, project_dir,
-    role_enabled,
+    role_enabled, route_role,
 )
 
 REPEAT_EVERY = 8
@@ -322,7 +322,7 @@ def handle_dispatch_return(payload) -> None:
         return
     if not role_enabled(cfg, "reviewer"):
         return  # the nudge's only action is to dispatch a role that cannot run
-    spawned = normalize_role((payload.get("tool_input") or {}).get("subagent_type"))
+    spawned = route_role((payload.get("tool_input") or {}).get("subagent_type"))
     if spawned != "builder":
         return  # reviewer returning is the normal path; silence is correct there
     print(json.dumps({"hookSpecificOutput": {

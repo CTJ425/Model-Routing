@@ -23,6 +23,9 @@ MAIN_ALIASES = {"", "main", "default", "root", "none"}
 # The roles this plugin owns. Any other agent in the repo is not ours to police.
 ROUTE_ROLES = ("scout", "builder", "reviewer", "scribe")
 
+# The `name` in route/.claude-plugin/plugin.json: the prefix Claude Code gives our agents.
+ROUTE_NAMESPACE = "route"
+
 # Stable names let the skill, the review nudge, and project configuration refer to
 # the same policy without copying prose into three different files.
 DEFAULT_REVIEW_TRIGGERS = (
@@ -88,6 +91,19 @@ def normalize_role(raw) -> str:
     return role.split(":")[-1].strip().lower()
 
 
+def route_role(raw):
+    """-> the route role an agent name refers to, or None.
+
+    Only a bare name or this plugin's namespace counts ("builder", "route:builder",
+    "route:sub:builder"). `other:builder` is another plugin's agent that shares the
+    name, and turning route's builder off must not turn it off too.
+    """
+    parts = [p.strip().lower() for p in (raw or "").split(":")]
+    if len(parts) > 1 and parts[0] != ROUTE_NAMESPACE:
+        return None
+    return parts[-1] if parts[-1] in ROUTE_ROLES else None
+
+
 def project_dir(payload=None) -> str:
     cwd = (payload or {}).get("cwd") if isinstance(payload, dict) else None
     return os.path.abspath(os.environ.get("CLAUDE_PROJECT_DIR") or cwd or os.getcwd())
@@ -140,11 +156,13 @@ def load_config(project: str) -> dict:
 
 def role_enabled(cfg: dict, role) -> bool:
     """-> whether `role` may be dispatched. A role this plugin does not own is never
-    blocked here."""
-    name = normalize_role(role)
-    if name not in ROUTE_ROLES:
+    blocked here, and neither is one whose switch is not an object: the hooks fail open,
+    and /route:doctor reports the malformed switch."""
+    name = route_role(role)
+    roles = cfg.get("roles")
+    if name is None or not isinstance(roles, dict):
         return True
-    entry = (cfg.get("roles") or {}).get(name)
+    entry = roles.get(name)
     if not isinstance(entry, dict):
         return True
     return bool(entry.get("enabled", True))

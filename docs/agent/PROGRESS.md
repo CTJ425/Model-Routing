@@ -5,6 +5,36 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
+## 📅 Log: 2026-09-17 10:57:36 CST (0.9.4 — role switches: namespace scope, doctor type check)
+
+- **Changed**: route/hooks/_config.py, route/hooks/routing_guard.py,
+  route/hooks/routing_observe.py, route/scripts/routing_doctor.py, tests/test_guard.py,
+  tests/test_observe.py, tests/test_doctor.py, docs/CHANGELOG.md
+- **Why**: a check of the role on/off switches, run against the real hook scripts,
+  found every documented path working and two gaps. Fixed by user decision.
+  - `roles.<role>.enabled=false` also denied another plugin's agent of the same name
+    (`other:builder`): `role_enabled` stripped any namespace, contrary to its own
+    docstring.
+  - A switch the hooks cannot read failed open with no sign. `"enabled": "false"`,
+    `"roles": {"builder": false}` and a misspelled key or role all left the role on, and
+    `/route:doctor` reported "all four roles may be dispatched".
+- **What changed**: `_config.route_role` names a route role only for a bare name or the
+  `route` namespace. The guard's dispatch check and the review nudge use it. The caller
+  side (`agent_type`, which picks the write rules) still strips any namespace; out of
+  scope here. `role_enabled` also returns true for a `roles` value that is not an object:
+  the hooks crashed there, which cost the session its brief. The doctor's `roles` check
+  reads the file as written and FAILs on each unreadable switch, naming the state the
+  hooks actually use.
+- **Not changed**: what a well-formed `false` does; the hooks still fail open on a
+  malformed one, and the doctor is where that shows.
+- **Housekeeping**: `roll_records.py --keep 2` moved the 0.9.3 entry into
+  `PROGRESS_ARCHIVE.md`.
+- **Tests**: 278 passed, 0 failed (was 254), also on Python 3.8. Against the previous
+  code 20 of the new cases fail (8 doctor, 9 guard, 3 observe); the other 4 pin behaviour
+  it already had.
+
+---
+
 ## 📅 Log: 2026-09-17 10:12:22 CST (0.9.4 — catch up with Claude Code 2.1.198–2.1.271)
 
 - **Changed**: route/skills/route/SKILL.md, route/agents/scout.md,
@@ -52,29 +82,3 @@ Newest entry at the top, immediately after this header block. Older entries roll
 - **Tests**: 254 passed, 0 failed (was 232). Each new case was also run against the 0.9.3
   file it covers: 4 doctor, 2 observe, 5 guard and 3 dispatch_delta cases fail there; the
   rest pin behaviour 0.9.3 already had.
-
----
-
-## 📅 Log: 2026-09-07 16:58:14 CST (0.9.3 — turn budgets raised out of the working range)
-
-- **Changed**: route/agents/scout.md, route/agents/reviewer.md, route/agents/scribe.md,
-  route/agents/builder.md, route/skills/route/SKILL.md, README.md,
-  route/.claude-plugin/plugin.json, .claude/version.config.json, docs/CHANGELOG.md
-- **Why**: user decision. 0.9.2 raised every cap from measured data and stated the
-  principle behind it — a cap is a stop, not a budget; unused headroom costs nothing,
-  hitting one costs a re-dispatch that replays the whole brief. This release applies that
-  principle further, so a capped run is an anomaly to investigate rather than a routine
-  cost the caller absorbs silently.
-- **What changed (budgets)**: scout 40 → 80, reviewer 40 → 80, scribe 45 → 90,
-  builder 80 → 240. The hardcoded scout budget in scout.md, SKILL.md Step 1 and the
-  README role table follow the new number.
-- **Not changed**: guard behaviour, role scopes, model tiers, the degradation protocol
-  (`NOT ANSWERED:`, `VERIFY: BLOCKED`), and scout's 40-line output ceiling — an output
-  limit, not a turn budget.
-- **Housekeeping**: `.claude/version.config.json` and `docs/CHANGELOG.md` were collateral
-  losses of the b468865 architect rollback, which reverted the whole 0.10.0 commit pair.
-  Both are restored; the CHANGELOG drops the reverted 0.10.0 section and gains the 0.9.2
-  entry it never received. The `v0.10.0` tag pointed at that reverted work and had no
-  Release; it is deleted from the local repo, from `origin`, and from its stale plugin
-  install cache under `~/.claude/plugins/cache/`.
-- **Tests**: 232 passed, 0 failed.

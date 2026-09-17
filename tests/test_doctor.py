@@ -51,6 +51,42 @@ def test_roles_check_warns_about_a_role_that_is_off(project):
     assert "scribe" in out
 
 
+@pytest.mark.parametrize("roles,named", [
+    ({"builder": {"enabled": "false"}}, 'roles.builder.enabled is "false" (a string)'),
+    ({"builder": {"enabled": 0}}, "roles.builder.enabled is 0 (a number)"),
+    ({"builder": False}, "roles.builder is false (a boolean)"),
+    ({"builder": {"enable": False}}, "roles.builder.enable is not a known key"),
+    ({"buidler": {"enabled": False}}, "roles.buidler is not a route role"),
+    (["builder"], 'roles is ["builder"] (an array)'),
+])
+def test_roles_check_fails_on_a_switch_the_hooks_cannot_read(roles, named, project):
+    """The file says off; the guard lets the role through. Nothing else would show it."""
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["roles"] = roles
+    write_config(project, cfg)
+    p = run_doctor(project)
+    assert "[FAIL] roles " + named in p.stdout, p.stdout + p.stderr
+    assert p.returncode == 1
+
+
+def test_roles_check_names_the_state_the_hooks_actually_use(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["roles"] = {"builder": {"enabled": "false"}, "scribe": {"enabled": False}}
+    write_config(project, cfg)
+    out = run_doctor(project).stdout
+    assert "so builder is on" in out
+    assert "Off now: scribe." in out
+
+
+def test_roles_check_fails_on_a_malformed_legacy_scout_switch(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["scout"] = {"enabled": "no"}
+    write_config(project, cfg)
+    out = run_doctor(project).stdout
+    assert '[FAIL] roles scout.enabled is "no" (a string)' in out
+    assert "so scout is on" in out
+
+
 def test_prod_paths_matching_nothing_is_a_failure(project):
     """The monorepo trap: builder is denied every write and nothing says why."""
     cfg = json.loads(json.dumps(BASE_CONFIG))

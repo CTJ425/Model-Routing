@@ -119,6 +119,15 @@ def test_brief_keeps_the_other_roles_when_one_is_off(project):
     assert "`reviewer` checks risk work" in text
 
 
+@pytest.mark.parametrize("roles", [["builder"], "builder", None])
+def test_brief_survives_a_roles_block_that_is_not_an_object(roles, project):
+    """A malformed switch fails open; it must not cost the session its brief."""
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["roles"] = roles
+    write_config(project, cfg)
+    assert "`builder` implements" in brief(project)
+
+
 # --- discovery counter ---
 
 def discovery(project, session="t1"):
@@ -226,6 +235,10 @@ def test_no_review_nudge_when_the_reviewer_is_disabled(project):
     """Its only instruction is to dispatch a role the guard now denies."""
     with_roles(project, reviewer=False)
     assert dispatch_return(project, "route:builder") is None
+
+
+def test_another_plugins_builder_returning_does_not_nudge(project):
+    assert dispatch_return(project, "other:builder") is None
 
 
 def test_reviewer_return_is_silent(project):

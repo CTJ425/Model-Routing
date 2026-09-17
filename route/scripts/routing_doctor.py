@@ -217,8 +217,84 @@ def check_models(cfg: dict) -> None:
           "may not be in force." % (override, shown, tiers))
 
 
+# bool before int: True is an int too.
+JSON_KINDS = ((bool, "a boolean"), (int, "a number"), (float, "a number"),
+              (str, "a string"), (list, "an array"), (dict, "an object"))
+
+
+def _shown(value) -> str:
+    if value is None:
+        return "null"
+    kind = next((name for t, name in JSON_KINDS if isinstance(value, t)),
+                type(value).__name__)
+    return "%s (%s)" % (json.dumps(value), kind)
+
+
+def _config_doc() -> dict:
+    """-> the project file as written, or {} when it is missing or does not parse
+    (check_config reports that). Switches are checked here rather than in the merged
+    config, which folds the legacy `scout.enabled` into `roles.scout` and would name a
+    key the file does not have."""
+    try:
+        with open(os.path.join(PROJECT, ".claude", "route.config.json"),
+                  encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except Exception:
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def role_switch_faults(doc: dict, cfg: dict) -> list:
+    """-> one line per role switch that does not do what the file says.
+
+    The hooks fail open and read a switch by truthiness, so `"enabled": "false"` leaves
+    the role on, and so does a role entry that is not an object, a misspelled key, or a
+    misspelled role. The file reads as off while every dispatch goes through.
+    """
+    def state(role):
+        return "%s is %s" % (role, "on" if role_enabled(cfg, role) else "off")
+
+    faults = []
+    roles = doc.get("roles", {})
+    if not isinstance(roles, dict):
+        faults.append("roles is %s, expected an object, so the hooks ignore it"
+                      % _shown(roles))
+        roles = {}
+    for name, entry in roles.items():
+        if name not in ROUTE_ROLES:
+            faults.append("roles.%s is not a route role (%s), so nothing reads it"
+                          % (name, ", ".join(ROUTE_ROLES)))
+            continue
+        if not isinstance(entry, dict):
+            faults.append('roles.%s is %s, expected {"enabled": true|false}, so %s'
+                          % (name, _shown(entry), state(name)))
+            continue
+        for key in entry:
+            if key != "enabled":
+                faults.append("roles.%s.%s is not a known key (enabled), so nothing "
+                              "reads it" % (name, key))
+        if "enabled" in entry and not isinstance(entry["enabled"], bool):
+            faults.append("roles.%s.enabled is %s, expected true or false, so %s"
+                          % (name, _shown(entry["enabled"]), state(name)))
+    legacy = doc.get("scout", {})
+    if not isinstance(legacy, dict):
+        faults.append("scout is %s, expected an object, so the hooks ignore it"
+                      % _shown(legacy))
+    elif "enabled" in legacy and not isinstance(legacy["enabled"], bool):
+        faults.append("scout.enabled is %s, expected true or false, so %s"
+                      % (_shown(legacy["enabled"]), state("scout")))
+    return faults
+
+
 def check_roles(cfg: dict) -> None:
     off = [r for r in ROUTE_ROLES if not role_enabled(cfg, r)]
+    faults = role_switch_faults(_config_doc(), cfg)
+    if faults:
+        # A switch that reads as off in the file while the guard lets the role through
+        # has no other symptom, so it fails here rather than passing quietly.
+        check("FAIL", "roles", "%s. Off now: %s."
+              % ("; ".join(faults), ", ".join(off) or "none"))
+        return
     if not off:
         check("PASS", "roles", "all four roles may be dispatched.")
         return
