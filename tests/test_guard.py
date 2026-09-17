@@ -169,6 +169,23 @@ def test_read_reason_drops_scout_when_disabled(project):
     assert "scout" not in reason(got)
 
 
+# --- an ask's reason is shown to the user only, but it is written for Claude ---
+
+def test_ask_hands_its_reason_to_claude(project):
+    big = project / "big.md"
+    big.write_text("x" * 40 * 1024)
+    got = read("main", str(big), project)
+    assert decision(got) == "ask"
+    assert reason(got) in got["hookSpecificOutput"].get("additionalContext", "")
+
+
+def test_deny_does_not_repeat_its_reason_as_context(project):
+    """Claude Code already shows a deny's reason to Claude."""
+    got = write("route:builder", "tests/a.test.ts", project)
+    assert decision(got) == "deny"
+    assert "additionalContext" not in got["hookSpecificOutput"]
+
+
 # --- Bash write detection ---
 
 @pytest.mark.parametrize("role,command,want", [
@@ -208,12 +225,25 @@ def test_records_become_plain_docs_when_bookkeeping_is_off(project):
 @pytest.mark.parametrize("spawned,want", [
     ("Explore", "ask"),
     ("general-purpose", "ask"),
+    ("Plan", "ask"),
+    ("claude", "ask"),         # built-in catch-all: no model of its own
+    ("fork", "ask"),           # same model and context as this session
+    ("", "ask"),               # no type given: Claude Code runs general-purpose
     ("route:scout", None),
+    ("other:claude", None),    # a plugin agent declares its own model
+    ("claude-code-guide", None),
 ])
 def test_discovery_dispatch(spawned, want, project):
     got = run_guard({"tool_name": "Agent", "agent_type": "",
                      "tool_input": {"subagent_type": spawned}}, project)
     assert decision(got) == want
+
+
+def test_untyped_dispatch_is_named_as_general_purpose(project):
+    got = run_guard({"tool_name": "Agent", "agent_type": "",
+                     "tool_input": {"prompt": "look around"}}, project)
+    assert decision(got) == "ask"
+    assert "`general-purpose`" in reason(got)
 
 
 # --- roles.<role>.enabled: a role turned off is denied, not merely discouraged ---

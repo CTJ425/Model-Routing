@@ -133,6 +133,7 @@ def scan_main(path):
                     "ctx_before": ctx,
                     "ctx_after": None,
                     "solo": len(calls) == 1,
+                    "async": False,
                 }
 
         for block in msg.get("content") or []:
@@ -141,13 +142,22 @@ def scan_main(path):
             d = disp.get(block.get("tool_use_id"))
             if d is not None:
                 d["report_chars"] = text_len(block.get("content"))
+                result = row.get("toolUseResult")
+                d["async"] = (isinstance(result, dict)
+                              and result.get("status") == "async_launched")
                 pending.append(d)
     return disp, turn
 
 
 def scan_subagent(path):
-    """-> (tool_result_chars, assistant_turns) for one subagent transcript."""
+    """-> (tool_result_chars, assistant_turns, report_chars) for one subagent transcript.
+
+    report_chars is what the subagent handed back: the message of its last
+    `SubagentHandback` call (auto mode, Claude Code 2.1.271+), otherwise the text it wrote
+    after its last tool result.
+    """
     consumed, turns = 0, 0
+    handback, tail = None, 0
     for row in rows(path):
         msg = row.get("message")
         if not isinstance(msg, dict):
@@ -155,9 +165,17 @@ def scan_subagent(path):
         if row.get("type") == "assistant" and msg.get("usage"):
             turns += 1
         for block in msg.get("content") or []:
-            if isinstance(block, dict) and block.get("type") == "tool_result":
+            if not isinstance(block, dict):
+                continue
+            kind = block.get("type")
+            if kind == "tool_result":
                 consumed += text_len(block.get("content"))
-    return consumed, turns
+                tail = 0
+            elif kind == "tool_use" and block.get("name") == "SubagentHandback":
+                handback = len(str((block.get("input") or {}).get("message") or ""))
+            elif kind == "text" and row.get("type") == "assistant":
+                tail += len(block.get("text") or "")
+    return consumed, turns, (tail if handback is None else handback)
 
 
 def collect(session_path):
@@ -180,12 +198,18 @@ def collect(session_path):
         jsonl = meta_path[: -len(".meta.json")] + ".jsonl"
         if not os.path.exists(jsonl):
             continue
-        consumed, sub_turns = scan_subagent(jsonl)
-        cost = (d["prompt_chars"] + d["report_chars"]) / CHARS_PER_TOKEN
+        consumed, sub_turns, sub_report = scan_subagent(jsonl)
+        # A background launch's tool_result is the launch notice, and a hand-back's is a
+        # note; the report itself reaches main later. Its size is in the subagent's own
+        # transcript. A foreground tool_result already is the report.
+        report_chars = max(d["report_chars"], sub_report)
+        cost = (d["prompt_chars"] + report_chars) / CHARS_PER_TOKEN
         benefit = consumed / CHARS_PER_TOKEN
         remaining = max(total_turns - d["turn_index"], 0)
+        # Across a background launch the context grows by the prompt alone.
         measured = (d["ctx_after"] - d["ctx_before"]
-                    if d["solo"] and d["ctx_after"] is not None else None)
+                    if d["solo"] and d["ctx_after"] is not None
+                    and not d.get("async") else None)
         out.append({
             "session": os.path.basename(session_path)[:8],
             "role": meta.get("agentType") or d["role"],
@@ -197,7 +221,7 @@ def collect(session_path):
             "sub_turns": sub_turns,
             "measured": measured,
             "prompt": d["prompt_chars"] / CHARS_PER_TOKEN,
-            "report": d["report_chars"] / CHARS_PER_TOKEN,
+            "report": report_chars / CHARS_PER_TOKEN,
         })
     return out
 

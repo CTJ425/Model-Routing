@@ -98,8 +98,10 @@ so. If there is no `.gitignore`, create one with that single line.
 ## 8. Report
 
 State what was created, what already existed, and that `/route:config` changes the
-per-role model tiers later. If `CLAUDE_CODE_SUBAGENT_MODEL` is set in the environment,
-say that it outranks the `models` block and those tiers will not take effect until it is
-unset.
+per-role model tiers later. If `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is on in the
+environment, say that it forces every subagent onto one model (Claude Code 2.1.257+), so
+the `models` tiers will not take effect until it is unset. If only
+`CLAUDE_CODE_SUBAGENT_MODEL` is set, say that it outranks the `models` block only on
+Claude Code older than 2.1.251; on newer versions the tiers stay in force.
 
 $ARGUMENTS

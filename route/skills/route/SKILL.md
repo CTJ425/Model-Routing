@@ -87,10 +87,17 @@ plugin update would overwrite. If the file or the key is missing, dispatch with 
 `model` override and let the agent's frontmatter default apply. `/route:config` is how a
 user edits this file; never hand-edit an agent's frontmatter to change its tier.
 
-One override sits above both: the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
-outranks the per-invocation `model` parameter. If it is set in the user's environment,
-this step has no effect and every subagent runs on that model — say so rather than
-reporting a tier that is not in force. `/route:config` reports it when present.
+The `model` parameter takes a model alias (`haiku`, `sonnet`, `opus`), not a full model
+id.
+
+One override sits above both: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (Claude Code 2.1.257+)
+ignores the `model` parameter and the frontmatter, and runs every subagent on
+`CLAUDE_CODE_SUBAGENT_MODEL`, or on this session's model when that is unset. If it is set
+in the user's environment, this step has no effect — say so rather than reporting a tier
+that is not in force. `CLAUDE_CODE_SUBAGENT_MODEL` on its own is only a default: since
+Claude Code 2.1.251 it ranks below both the `model` parameter and the frontmatter, and
+every route role declares a frontmatter model, so it changes nothing here. Before 2.1.251
+it outranked both. `/route:config` reports either variable when present.
 
 Also read `language.artifacts` and pass it explicitly to every dispatched agent. It controls
 prose in reports and records; code, paths, identifiers, and commit messages remain English.
@@ -106,10 +113,11 @@ pipeline", always "where is X chosen, who calls it, which tests cover it". You g
 If you have made a dozen Read/Grep calls yourself, you are doing scout's work at several
 times the price; a hook will tell you so.
 
-Dispatch it as `route:scout`. Do not reach for the built-in `Explore` or
-`general-purpose` instead — they inherit the caller's model, so they do scout's job at
-the caller's price. A PreToolUse guard asks before letting one through; confirm only
-when you need a tool scout lacks.
+Dispatch it as `route:scout`. Do not reach for the built-in `Explore`, `Plan`,
+`general-purpose` or `claude` agents, a `fork`, or an Agent call with no type (which
+runs `general-purpose`) instead — they run on the caller's model, so they do scout's
+job at the caller's price. A PreToolUse guard asks before letting one through; confirm
+only when you need a tool scout lacks.
 
 Scout has no Bash. If the material to compress is command output, put the text in the
 dispatch prompt or write it to a file and give scout the path.
@@ -132,9 +140,11 @@ caller paid for the reading twice.
   range for the next one.
 - **A scout cut off at the budget keeps its state.** Resume it with `SendMessage` instead
   of re-dispatching from cold. A scout that stopped itself hands you a `NOT ANSWERED:` line
-  to resume against; one that was cut hard returns nothing at all, so resume it with the
-  same question plus any line ranges you now know. If a second resume also returns nothing,
-  the question is too broad — split it. Do not resume a third time.
+  to resume against. One cut at the cap comes back marked partial (Claude Code 2.1.246+;
+  older versions return nothing at all), and what it holds is whatever scout had written
+  when it was cut, not necessarily a map. Resume it with the same question plus any line
+  ranges you now know. If a second resume is also cut off without an answer, the question is too broad —
+  split it. Do not resume a third time.
 
 ## Step 2 — the builder's input, sized by lane
 

@@ -50,7 +50,7 @@
     },
     "models": {
       "type": "object",
-      "description": "Per-role model override, passed as the Agent call's `model` parameter. Any alias or full model id is accepted; it is not validated against a live model list. CLAUDE_CODE_SUBAGENT_MODEL, if set, outranks all of these.",
+      "description": "Per-role model override, passed as the Agent call's `model` parameter, which takes a model alias such as haiku, sonnet or opus. It is not validated against a live model list. On Claude Code 2.1.251+ it outranks CLAUDE_CODE_SUBAGENT_MODEL; only CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 (2.1.257+) overrides it.",
       "additionalProperties": false,
       "properties": {
         "scout": { "type": "string" },

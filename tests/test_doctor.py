@@ -19,6 +19,7 @@ DOCTOR = os.path.join(REPO, "route", "scripts", "routing_doctor.py")
 def run_doctor(project, env_extra=None):
     env = dict(os.environ)
     env.pop("CLAUDE_CODE_SUBAGENT_MODEL", None)
+    env.pop("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", None)
     env["CLAUDE_PROJECT_DIR"] = str(project)
     env.update(env_extra or {})
     return subprocess.run([sys.executable, DOCTOR], capture_output=True, text=True,
@@ -67,11 +68,69 @@ def test_missing_config_warns_but_does_not_fail(project):
     assert p.returncode == 0
 
 
-def test_subagent_model_override_is_reported(project):
-    """CLAUDE_CODE_SUBAGENT_MODEL outranks every per-role tier; silence about it is a lie."""
-    p = run_doctor(project, {"CLAUDE_CODE_SUBAGENT_MODEL": "opus"})
+@pytest.fixture
+def claude_on_path(tmp_path_factory):
+    """-> fn(version) giving a PATH whose `claude --version` prints `version`, or fails
+    when `version` is None. The model check's verdict depends on the running version."""
+    def make(version):
+        bindir = tmp_path_factory.mktemp("bin")
+        exe = bindir / "claude"
+        body = 'echo "%s (Claude Code)"' % version if version else "exit 1"
+        exe.write_text("#!/bin/sh\n%s\n" % body)
+        exe.chmod(0o755)
+        return str(bindir) + os.pathsep + os.environ.get("PATH", "")
+    return make
+
+
+needs_sh = pytest.mark.skipif(os.name == "nt", reason="fake claude is a POSIX shell script")
+
+
+@needs_sh
+@pytest.mark.parametrize("version, verdict", [
+    ("2.1.274", "[PASS] models"),   # only a default since 2.1.251
+    ("2.1.250", "[WARN] models"),   # still outranks the tiers
+    (None, "[WARN] models"),        # version unknown: say what it would do
+])
+def test_subagent_model_alone_is_judged_by_version(project, claude_on_path,
+                                                   version, verdict):
+    """Silence about an override that is in force is a lie; so is a warning about one
+    that is not."""
+    p = run_doctor(project, {"CLAUDE_CODE_SUBAGENT_MODEL": "opus",
+                             "PATH": claude_on_path(version)})
+    assert verdict in p.stdout
+    assert "CLAUDE_CODE_SUBAGENT_MODEL=opus" in p.stdout
+
+
+@needs_sh
+def test_force_puts_one_model_over_every_tier(project, claude_on_path):
+    p = run_doctor(project, {"CLAUDE_CODE_SUBAGENT_MODEL": "opus",
+                             "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1",
+                             "PATH": claude_on_path("2.1.274")})
     assert "[WARN] models" in p.stdout
-    assert "CLAUDE_CODE_SUBAGENT_MODEL" in p.stdout
+    assert "runs on opus" in p.stdout
+
+
+@needs_sh
+def test_force_alone_runs_on_the_main_model(project, claude_on_path):
+    p = run_doctor(project, {"CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1",
+                             "PATH": claude_on_path("2.1.274")})
+    assert "[WARN] models" in p.stdout
+    assert "main session's model" in p.stdout
+
+
+@needs_sh
+def test_force_is_ignored_before_it_existed(project, claude_on_path):
+    p = run_doctor(project, {"CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1",
+                             "PATH": claude_on_path("2.1.255")})
+    assert "[PASS] models" in p.stdout
+
+
+@needs_sh
+def test_subagent_model_inherit_is_unset(project, claude_on_path):
+    p = run_doctor(project, {"CLAUDE_CODE_SUBAGENT_MODEL": "inherit",
+                             "PATH": claude_on_path(None)})
+    assert "[PASS] models" in p.stdout
+    assert "CLAUDE_CODE_SUBAGENT_MODEL" not in p.stdout
 
 
 def test_summary_line_counts_every_check(project):

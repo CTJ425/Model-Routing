@@ -4,6 +4,50 @@ All notable changes to the `route` plugin. This file is the source of truth from
 onward; releases 0.9.0 and earlier live in the git tags and their GitHub Releases, and
 the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its archive.
 
+## [0.9.4] - 2026-09-17
+
+### Fixed
+
+- The subagent model precedence now matches Claude Code 2.1.251+: the per-invocation
+  `model` parameter outranks the agent frontmatter, which outranks
+  `CLAUDE_CODE_SUBAGENT_MODEL`. Only `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (2.1.257+) puts
+  one model above every tier. `SKILL.md` Step 0.5, `/route:config`, `/route:init`, the
+  config schema and the README said the plain variable outranked everything.
+- `/route:doctor` no longer warns that the tiers are not in force when only
+  `CLAUDE_CODE_SUBAGENT_MODEL` is set on 2.1.251+. It reads `claude --version`, warns on
+  `_FORCE`, keeps the warning for older or unknown versions, and treats `inherit` as unset.
+- `models.<role>` is documented as a model alias (`haiku`, `sonnet`, `opus`): the Agent
+  tool's `model` parameter does not take a full model id.
+- The README role table shows the 0.9.3 turn budgets (80 / 240 / 80 / 90). 0.9.3 updated
+  only the scout budget in the README body.
+- The review nudge no longer tells the main session a background `builder` has returned.
+  Since Claude Code 2.1.198 a dispatch runs in the background by default and its tool
+  response carries `status: "async_launched"` with no launch wording, so every launch read
+  as a finished builder and the nudge said to dispatch `reviewer` now. The status now
+  decides, ahead of any text in the response.
+- A guard `ask` now also sends its reason as `additionalContext`. Claude Code shows an
+  ask's `permissionDecisionReason` to the user only, so the cheaper path each reason names
+  never reached the main session.
+- The discovery-agent ask covers every built-in type that runs on the session's model:
+  `Plan`, the `claude` catch-all and `fork` join `Explore` and `general-purpose`, and an
+  Agent call with no `subagent_type` counts as `general-purpose`, the type Claude Code
+  runs for it. Matching is now exact, so a plugin agent such as `other:claude` passes.
+- `/route:delta` measures a background dispatch's report from the subagent's own
+  transcript: the text after its last tool result, or its `SubagentHandback` message
+  (auto mode, 2.1.271+). The main transcript holds only the launch notice or a hand-back
+  note there. Background launches are left out of `--validate`, since the launch turn
+  grows the context by the prompt alone.
+- `SKILL.md` Step 1 and `scout.md` no longer say a subagent cut at `maxTurns` returns
+  nothing: since 2.1.246 its output comes back marked partial.
+
+### Unchanged
+
+Role scopes, write rules, model tiers, turn budgets, and every Bash rule.
+
+### Tests
+
+254 passed (was 232).
+
 ## [0.9.3] - 2026-09-07
 
 ### Changed

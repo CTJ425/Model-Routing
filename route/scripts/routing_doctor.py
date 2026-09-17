@@ -11,6 +11,7 @@ Usage (run from the project being checked, or set CLAUDE_PROJECT_DIR):
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -156,17 +157,64 @@ def check_paths_docs(cfg: dict) -> None:
     check("PASS", "paths.docs", "every hot record file exists.")
 
 
+# Claude Code 2.1.251 moved CLAUDE_CODE_SUBAGENT_MODEL below the per-invocation `model`
+# parameter and the agent frontmatter; 2.1.257 added _FORCE to put one model above both.
+ENV_DEMOTED = (2, 1, 251)
+FORCE_ADDED = (2, 1, 257)
+TRUTHY = {"1", "true", "yes", "on"}
+
+
+def claude_version():
+    """-> the Claude Code version as an (major, minor, patch) tuple, or None."""
+    exe = shutil.which("claude")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True,
+                             timeout=10).stdout
+    except Exception:
+        return None
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", out or "")
+    return tuple(int(n) for n in m.groups()) if m else None
+
+
 def check_models(cfg: dict) -> None:
-    override = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
-    if override:
-        check("WARN", "models",
-              "CLAUDE_CODE_SUBAGENT_MODEL=%s is set; it outranks every per-role tier, "
-              "so the configured tiers below are not in force." % override)
-        return
     models = cfg.get("models") or {}
-    check("PASS", "models", "scout=%s builder=%s reviewer=%s scribe=%s." % (
+    tiers = "scout=%s builder=%s reviewer=%s scribe=%s" % (
         models.get("scout"), models.get("builder"),
-        models.get("reviewer"), models.get("scribe")))
+        models.get("reviewer"), models.get("scribe"))
+    override = (os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or "").strip()
+    if override.lower() == "inherit":
+        override = ""  # documented as the same as unset
+    force = (os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE")
+             or "").strip().lower() in TRUTHY
+    if not override and not force:
+        check("PASS", "models", tiers + ".")
+        return
+
+    version = claude_version()
+    shown = ".".join(map(str, version)) if version else "unknown"
+    if force and (version is None or version >= FORCE_ADDED):
+        check("WARN", "models",
+              "CLAUDE_CODE_SUBAGENT_MODEL_FORCE is on (Claude Code %s); every subagent "
+              "runs on %s, so the configured tiers (%s) are not in force."
+              % (shown, override or "the main session's model", tiers))
+        return
+    if not override:
+        # _FORCE alone, on a version that does not read it.
+        check("PASS", "models", "%s. CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set, but "
+              "Claude Code %s predates it." % (tiers, shown))
+        return
+    if version is not None and version >= ENV_DEMOTED:
+        check("PASS", "models",
+              "%s. CLAUDE_CODE_SUBAGENT_MODEL=%s is set, but on Claude Code %s it only "
+              "applies to agents with no model of their own; every route role declares "
+              "one, so these tiers are in force." % (tiers, override, shown))
+        return
+    check("WARN", "models",
+          "CLAUDE_CODE_SUBAGENT_MODEL=%s is set and the Claude Code version is %s; "
+          "before 2.1.251 it outranks every per-role tier, so the configured tiers (%s) "
+          "may not be in force." % (override, shown, tiers))
 
 
 def check_roles(cfg: dict) -> None:

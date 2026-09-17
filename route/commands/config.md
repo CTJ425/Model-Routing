@@ -8,14 +8,25 @@ to run `/route:init` first — do not fabricate one here.
 
 ## Before showing anything
 
-Check whether `CLAUDE_CODE_SUBAGENT_MODEL` is set in the environment (`echo
-$CLAUDE_CODE_SUBAGENT_MODEL`). If it is, lead with this warning:
+Check both model variables and the Claude Code version (`echo
+"$CLAUDE_CODE_SUBAGENT_MODEL" "$CLAUDE_CODE_SUBAGENT_MODEL_FORCE"; claude --version`).
+Treat `CLAUDE_CODE_SUBAGENT_MODEL=inherit` as unset.
 
-> `CLAUDE_CODE_SUBAGENT_MODEL=<value>` is set. It outranks the per-dispatch `model`
-> parameter, so every subagent runs on that model and the `models` block below has no
-> effect until the variable is unset.
+- `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is on (`1`) and the version is 2.1.257 or later —
+  lead with this warning:
 
-Report it as fact, not as a suggestion to unset it.
+  > `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is on. Every subagent runs on
+  > `<CLAUDE_CODE_SUBAGENT_MODEL, or this session's model if that is unset>`, so the
+  > `models` block below has no effect until the variable is unset.
+
+- Only `CLAUDE_CODE_SUBAGENT_MODEL` is set, on 2.1.251 or later — say in one line that it
+  is only a default for agents with no model of their own. Every route role declares one,
+  so the `models` block below is in force.
+- Only `CLAUDE_CODE_SUBAGENT_MODEL` is set, and the version is older than 2.1.251 or
+  could not be read — lead with the warning above, naming `CLAUDE_CODE_SUBAGENT_MODEL`:
+  those versions let it outrank the `models` block.
+
+Report either as fact, not as a suggestion to unset it.
 
 ## Showing
 
@@ -32,8 +43,9 @@ suggestion.
 Parse `$ARGUMENTS` as `key=value` pairs and update just those keys:
 
 - A bare role name is shorthand for the model tier: `builder=opus` sets
-  `models.builder`. Valid roles: `scout`, `builder`, `reviewer`, `scribe`. Any model
-  alias or full model id is accepted — this file records the choice, it does not
+  `models.builder`. Valid roles: `scout`, `builder`, `reviewer`, `scribe`. The value is
+  passed as the Agent call's `model` parameter, which takes a model alias (`haiku`,
+  `sonnet`, `opus`), not a full model id. This file records the choice; it does not
   validate it against a live model list.
 - A dotted key sets that path directly: `roles.scribe.enabled=false`,
   `review.policy=always`, `guard.readKB=64`, `guard.mainSeverity=deny`,

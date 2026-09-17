@@ -85,7 +85,11 @@ DISABLED_ROLE_REASON = (
     "`/route:config roles.{role}.enabled=true`."
 )
 
-DISCOVERY_AGENTS = {"explore", "general-purpose"}
+# Built-in agent types that run on this session's model, or near it, with no tier of
+# their own. Matched exactly: a plugin agent such as `other:claude` declares its own.
+DISCOVERY_AGENTS = {"explore", "plan", "general-purpose", "claude", "fork"}
+# An Agent call that names no type gets this one.
+DEFAULT_AGENT = "general-purpose"
 DISCOVERY_REASON = (
     "`{name}` inherits this session's model, so it maps the codebase at or near the "
     "highest rate in the system. `scout` is the same job on a cheap tier with a 40-line "
@@ -309,12 +313,20 @@ RULES = {
 }
 
 
+ASK_CONTEXT = "The route guard asked the user to confirm this call. Its reason: {reason}"
+
+
 def respond(decision: str, reason: str) -> None:
-    print(json.dumps({"hookSpecificOutput": {
+    out = {
         "hookEventName": "PreToolUse",
         "permissionDecision": decision,
         "permissionDecisionReason": reason,
-    }}))
+    }
+    if decision == "ask":
+        # Claude Code shows an ask's reason to the user only, and every reason here names
+        # the cheaper path for Claude to take. additionalContext is what reaches Claude.
+        out["additionalContext"] = ASK_CONTEXT.format(reason=reason)
+    print(json.dumps({"hookSpecificOutput": out}))
     sys.exit(0)
 
 
@@ -415,10 +427,11 @@ def handle_dispatch(role, tool_input, cfg) -> None:
     if spawned_role in ROUTE_ROLES and not role_enabled(cfg, spawned_role):
         respond("deny", "[routing/%s] " % role + DISABLED_ROLE_REASON.format(
             name=spawned or spawned_role, role=spawned_role))
-    if spawned_role in DISCOVERY_AGENTS or spawned.lower() in DISCOVERY_AGENTS:
+    name = spawned or DEFAULT_AGENT
+    if name.lower() in DISCOVERY_AGENTS:
         template = (DISCOVERY_REASON if role_enabled(cfg, "scout")
                     else DISCOVERY_REASON_NO_SCOUT)
-        respond("ask", "[routing/%s] " % role + template.format(name=spawned))
+        respond("ask", "[routing/%s] " % role + template.format(name=name))
     sys.exit(0)
 
 

@@ -167,7 +167,8 @@ def test_discovery_nudge_fires_when_scout_enabled_explicitly(project):
 
 # --- review nudge ---
 
-def dispatch_return(project, subagent_type, agent_type="", tool_result=None):
+def dispatch_return(project, subagent_type, agent_type="", tool_result=None,
+                    tool_response=None):
     payload = {
         "hook_event_name": "PostToolUse", "tool_name": "Agent",
         "agent_type": agent_type, "session_id": "t1",
@@ -175,6 +176,8 @@ def dispatch_return(project, subagent_type, agent_type="", tool_result=None):
     }
     if tool_result is not None:
         payload["tool_result"] = tool_result
+    if tool_response is not None:
+        payload["tool_response"] = tool_response
     return context(run_observe(payload, project))
 
 
@@ -189,6 +192,34 @@ def test_builder_async_launch_says_dispatched_not_returned(project):
     assert "dispatched" in text
     assert "completion notification" in text
     assert "dispatch `route:reviewer` now" not in text
+
+
+def test_background_launch_status_says_dispatched_not_returned(project):
+    """The shape Claude Code 2.1.198+ sends for every background dispatch, which is the
+    default. No launch wording anywhere, so only the status can tell."""
+    text = dispatch_return(project, "route:builder", tool_response={
+        "status": "async_launched", "agentId": "a4d2c8f1e0b3a297",
+        "description": "Implement T1", "prompt": "Task: T1 — add the export",
+        "outputFile": "/tmp/a4d2c8f1e0b3a297.output", "resolvedModel": "claude-sonnet-5",
+    })
+    assert "just returned" not in text
+    assert "completion notification" in text
+
+
+def test_completed_status_outranks_launch_words_in_the_report(project):
+    """A finished builder whose report happens to say "launched successfully" returned."""
+    text = dispatch_return(project, "route:builder", tool_response={
+        "status": "completed", "agentId": "a1",
+        "content": [{"type": "text", "text": "Worker launched successfully; VERIFY: PASS"}],
+    })
+    assert "just returned" in text
+    assert "dispatch `route:reviewer` now" in text
+
+
+def test_unknown_status_falls_back_to_the_launch_wording(project):
+    text = dispatch_return(project, "route:builder", tool_response={
+        "status": "queued", "content": "Async agent launched successfully. Task id: t9"})
+    assert "completion notification" in text
 
 
 def test_no_review_nudge_when_the_reviewer_is_disabled(project):

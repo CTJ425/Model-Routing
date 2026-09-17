@@ -5,10 +5,10 @@
 | 角色 (Role) | 執行位置 | 預設模型與 Effort | 負責範疇 (Owns) | 絕對禁止 (Must Never) |
 |---|---|---|---|---|
 | **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 路由分級、順序排定、規格/簡報撰寫、結果裁決 | 撰寫生產程式碼、直接編輯追蹤記錄 |
-| **scout** | 子代理人 (Subagent) | `haiku` (low effort, 40 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
-| **builder** | 子代理人 (Subagent) | `sonnet` (high effort, 80 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
-| **reviewer** | 子代理人 (Subagent) | `sonnet` (high effort, 40 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
-| **scribe** | 子代理人 (Subagent) | `haiku` (low effort, 45 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
+| **scout** | 子代理人 (Subagent) | `haiku` (low effort, 80 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
+| **builder** | 子代理人 (Subagent) | `sonnet` (high effort, 240 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
+| **reviewer** | 子代理人 (Subagent) | `sonnet` (high effort, 80 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
+| **scribe** | 子代理人 (Subagent) | `haiku` (low effort, 90 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
 
 角色權限邊界透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
 
@@ -177,7 +177,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 
 - `paths.prod`：生產代碼的相對路徑或 Glob 規則，Guard 會據此界定生產代碼範圍。
 - `paths.test`：測試檔案路徑規則，Guard 會嚴禁 `builder` 擅自修改此範圍。
-- `models.<role>`：針對此專案覆寫該角色的分派模型（支援任何別名或完整模型 ID）。此設定僅作用於分派參數，不會修改插件本體檔案；若環境變數 `CLAUDE_CODE_SUBAGENT_MODEL` 已設定，該環境變數優先度高於此處設定。
+- `models.<role>`：針對此專案覆寫該角色的分派模型，由 Boss 以 Agent 工具的 `model` 參數帶入（此參數只接受模型別名，例如 `haiku`、`sonnet`、`opus`）。此設定僅作用於分派參數，不會修改插件本體檔案。Claude Code 2.1.251 起，此參數優先於 Agent frontmatter 與環境變數 `CLAUDE_CODE_SUBAGENT_MODEL`（後者只是沒有其他來源時的預設值）；只有再設定 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`（2.1.257 起）時，所有子代理人才會被強制改用 `CLAUDE_CODE_SUBAGENT_MODEL`（未設定則用主會話模型），此處設定隨之失效。2.1.251 以前的版本，`CLAUDE_CODE_SUBAGENT_MODEL` 本身就會蓋過此處設定。
 - `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（四個角色均可獨立關閉）。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。
 - `bookkeeping.enabled`：設為 `false` 時僅啟用模型路由功能（不分派 `scribe`、不維護追蹤文檔、Guard 不套用記錄保護規則）。
 - `bookkeeping.timezone`：寫入記錄時間戳時所採用的 IANA 時區（如 `UTC` 或 `Asia/Taipei`）。

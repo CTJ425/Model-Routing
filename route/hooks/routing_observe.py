@@ -108,7 +108,9 @@ BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or 
 - **Roster.** This session plans, writes specs, and adjudicates.{roster_clause}
   Per-role model tiers live in `.claude/route.config.json` (see `/route:config`).
 - **Guards will ask** before this session edits production code{record_clause},
-  dispatches `Explore`/`general-purpose`, or issues an unbounded Read over {read_kb}KB.
+  dispatches a built-in agent that runs on this session's model (`Explore`, `Plan`,
+  `general-purpose`, `claude`, `fork`, or no type at all), or issues an unbounded
+  Read over {read_kb}KB.
   An `ask` is policy, not an obstacle: take the cheaper path it names."""
 
 ROSTER_CLAUSE = {
@@ -293,10 +295,20 @@ ASYNC_LAUNCH_RE = re.compile(
 
 
 def is_async_launch(payload: dict) -> bool:
+    """A background dispatch returns its launch, not the agent's result.
+
+    Claude Code reports that as `status: "async_launched"`, and has run subagents in the
+    background by default since 2.1.198 (always, in an interactive session with fork mode
+    on). A structured status outranks the text: the same response carries the brief in
+    its `prompt` field, and a brief can say anything. Older builds returned launch text.
+    """
     for k in ("tool_result", "tool_response", "result", "tool_output"):
         val = payload.get(k)
         if not val:
             continue
+        status = val.get("status") if isinstance(val, dict) else None
+        if status in ("async_launched", "completed"):
+            return status == "async_launched"
         text = json.dumps(val) if isinstance(val, (dict, list)) else str(val)
         if ASYNC_LAUNCH_RE.search(text):
             return True
