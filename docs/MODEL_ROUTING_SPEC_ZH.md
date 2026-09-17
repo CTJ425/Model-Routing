@@ -307,7 +307,7 @@ flowchart TD
 
     ToolType -->|Agent / Task| CheckDispatch{分派檢查}
     CheckDispatch -->|分派已被停用角色| DenyDisabled[回應 deny: 該角色在 config 中被關閉]
-    CheckDispatch -->|主會話分派 explore / plan / general-purpose / claude / fork 或未指定類型| AskDiscovery[回應 ask: 內建探索代理人按最高費率計費，建議改用 scout]
+    CheckDispatch -->|主會話分派 explore / plan / general-purpose / claude 或未指定類型| AskDiscovery[回應 ask: 內建探索代理人按最高費率計費，建議改用 scout]
     CheckDispatch -->|一般分派| AllowDispatch[放行]
 
     ToolType -->|Write / Edit| CheckWrite{角色寫入權限矩陣}

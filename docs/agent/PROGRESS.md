@@ -35,8 +35,10 @@ Newest entry at the top, immediately after this header block. Older entries roll
   - An `ask`'s `permissionDecisionReason` is shown to the user, not to Claude. The guard
     now repeats it as `additionalContext`; a `deny` is unchanged, since Claude already
     sees that reason.
-  - The discovery ask now also covers `Plan`, `claude`, `fork` and an untyped Agent call
-    (which runs `general-purpose`), with exact matching.
+  - The discovery ask now also covers `Plan`, `claude` and an untyped Agent call (which
+    runs `general-purpose`), with exact matching. `fork` was in the first cut and is out
+    by user decision: fork mode spawns forks routinely, and an ask on each one stalled
+    automated workflows.
   - `dispatch_delta.py` took a background launch notice or a hand-back note as the report.
     It now reads the report size from the subagent transcript, and drops background
     launches from `--validate`. No local transcript had a background dispatch, so the
@@ -48,7 +50,7 @@ Newest entry at the top, immediately after this header block. Older entries roll
 - **Housekeeping**: `roll_records.py --keep 2` moved the 0.9.2 and 0.9.0 entries into
   `PROGRESS_ARCHIVE.md`; the hot file had been holding three.
 - **Tests**: 254 passed, 0 failed (was 232). Each new case was also run against the 0.9.3
-  file it covers: 4 doctor, 2 observe, 6 guard and 3 dispatch_delta cases fail there; the
+  file it covers: 4 doctor, 2 observe, 5 guard and 3 dispatch_delta cases fail there; the
   rest pin behaviour 0.9.3 already had.
 
 ---

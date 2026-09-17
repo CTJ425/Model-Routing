@@ -227,7 +227,7 @@ def test_records_become_plain_docs_when_bookkeeping_is_off(project):
     ("general-purpose", "ask"),
     ("Plan", "ask"),
     ("claude", "ask"),         # built-in catch-all: no model of its own
-    ("fork", "ask"),           # same model and context as this session
+    ("fork", None),            # left out: fork mode spawns these routinely
     ("", "ask"),               # no type given: Claude Code runs general-purpose
     ("route:scout", None),
     ("other:claude", None),    # a plugin agent declares its own model

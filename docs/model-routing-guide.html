@@ -1063,7 +1063,7 @@ flowchart TD
 
     CheckTool -->|Agent / Task| CheckAgent{分派檢查}
     CheckAgent -->|分派已停用之角色| DenyDisabled[回應 deny: 該角色在 config 中被禁用]
-    CheckAgent -->|Boss 分派 explore/plan/general-purpose/claude/fork 或未指定類型| AskDiscovery[回應 ask: 內建代理以最高費率計費，建議改用 scout]
+    CheckAgent -->|Boss 分派 explore/plan/general-purpose/claude 或未指定類型| AskDiscovery[回應 ask: 內建代理以最高費率計費，建議改用 scout]
     CheckAgent -->|合規分派| Allow
 
     CheckTool -->|Write / Edit| CheckWrite{寫入權限矩陣}

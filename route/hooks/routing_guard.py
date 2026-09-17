@@ -87,7 +87,9 @@ DISABLED_ROLE_REASON = (
 
 # Built-in agent types that run on this session's model, or near it, with no tier of
 # their own. Matched exactly: a plugin agent such as `other:claude` declares its own.
-DISCOVERY_AGENTS = {"explore", "plan", "general-purpose", "claude", "fork"}
+# `fork` is left out on purpose: fork mode, on by default in interactive sessions, spawns
+# forks routinely, and asking on each one stalls unattended workflows.
+DISCOVERY_AGENTS = {"explore", "plan", "general-purpose", "claude"}
 # An Agent call that names no type gets this one.
 DEFAULT_AGENT = "general-purpose"
 DISCOVERY_REASON = (

@@ -114,9 +114,9 @@ If you have made a dozen Read/Grep calls yourself, you are doing scout's work at
 times the price; a hook will tell you so.
 
 Dispatch it as `route:scout`. Do not reach for the built-in `Explore`, `Plan`,
-`general-purpose` or `claude` agents, a `fork`, or an Agent call with no type (which
-runs `general-purpose`) instead — they run on the caller's model, so they do scout's
-job at the caller's price. A PreToolUse guard asks before letting one through; confirm
+`general-purpose` or `claude` agents, or an Agent call with no type (which runs
+`general-purpose`), instead — they run on the caller's model, so they do scout's job at
+the caller's price. A PreToolUse guard asks before letting one through; confirm
 only when you need a tool scout lacks.
 
 Scout has no Bash. If the material to compress is command output, put the text in the

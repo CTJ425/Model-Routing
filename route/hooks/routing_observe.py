@@ -109,8 +109,8 @@ BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or 
   Per-role model tiers live in `.claude/route.config.json` (see `/route:config`).
 - **Guards will ask** before this session edits production code{record_clause},
   dispatches a built-in agent that runs on this session's model (`Explore`, `Plan`,
-  `general-purpose`, `claude`, `fork`, or no type at all), or issues an unbounded
-  Read over {read_kb}KB.
+  `general-purpose`, `claude`, or no type at all), or issues an unbounded Read
+  over {read_kb}KB.
   An `ask` is policy, not an obstacle: take the cheaper path it names."""
 
 ROSTER_CLAUSE = {

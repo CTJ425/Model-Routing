@@ -28,10 +28,12 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
 - A guard `ask` now also sends its reason as `additionalContext`. Claude Code shows an
   ask's `permissionDecisionReason` to the user only, so the cheaper path each reason names
   never reached the main session.
-- The discovery-agent ask covers every built-in type that runs on the session's model:
-  `Plan`, the `claude` catch-all and `fork` join `Explore` and `general-purpose`, and an
-  Agent call with no `subagent_type` counts as `general-purpose`, the type Claude Code
-  runs for it. Matching is now exact, so a plugin agent such as `other:claude` passes.
+- The discovery-agent ask covers more built-in types that run on the session's model:
+  `Plan` and the `claude` catch-all join `Explore` and `general-purpose`, and an Agent
+  call with no `subagent_type` counts as `general-purpose`, the type Claude Code runs for
+  it. Matching is now exact, so a plugin agent such as `other:claude` passes. A `fork` is
+  deliberately not asked about: fork mode, on by default in interactive sessions, spawns
+  forks routinely, and a prompt on each one stalls unattended workflows.
 - `/route:delta` measures a background dispatch's report from the subagent's own
   transcript: the text after its last tool result, or its `SubagentHandback` message
   (auto mode, 2.1.271+). The main transcript holds only the launch notice or a hand-back
