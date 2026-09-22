@@ -1,5 +1,6 @@
 """Tests for routing_observe.py — the brief, the counters, and the review nudge."""
 import json
+import re
 
 import pytest
 
@@ -126,6 +127,44 @@ def test_brief_survives_a_roles_block_that_is_not_an_object(roles, project):
     cfg["roles"] = roles
     write_config(project, cfg)
     assert "`builder` implements" in brief(project)
+
+
+# --- the brief's guard line names only the edits the guard still asks about ---
+
+def test_brief_names_both_edit_asks_by_default(project):
+    assert ("before this session edits production code or a tracking record,\n"
+            "  dispatches a built-in agent") in brief(project)
+
+
+def test_brief_drops_the_production_ask_when_builder_is_off(project):
+    with_roles(project, builder=False)
+    text = brief(project)
+    assert "production code" not in text
+    assert re.search(r"before this session\s+edits a tracking record,\s+dispatches", text)
+
+
+def test_brief_drops_the_record_ask_when_scribe_is_off(project):
+    with_roles(project, scribe=False)
+    text = brief(project)
+    assert "tracking record" not in text
+    assert re.search(r"before this session\s+edits production code,\s+dispatches", text)
+
+
+def test_brief_drops_the_edit_ask_when_builder_and_scribe_are_off(project):
+    with_roles(project, builder=False, scribe=False)
+    text = brief(project)
+    assert "production code" not in text
+    assert "tracking record" not in text
+    assert re.search(r"before this session\s+dispatches a built-in agent", text)
+    assert "unbounded Read" in text
+
+
+def test_brief_drops_the_edit_ask_when_builder_is_off_without_bookkeeping(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["bookkeeping"] = {"enabled": False}
+    cfg["roles"] = {"builder": {"enabled": False}}
+    write_config(project, cfg)
+    assert re.search(r"before this session\s+dispatches a built-in agent", brief(project))
 
 
 # --- discovery counter ---

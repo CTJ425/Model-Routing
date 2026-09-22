@@ -52,15 +52,25 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
   off. It used to report "all four roles may be dispatched" while the file read as off.
 - A `roles` value that is not an object no longer crashes the hooks. The session brief
   was lost with it; the guard failed open, as it still does.
+- With `roles.builder.enabled=false` the main session is the only implementer, but the
+  guard asked on every one of its production-code writes, through `Write`/`Edit` and
+  Bash, and the reason said to dispatch `builder`, which the guard denies. A write whose
+  owning role is off now passes with no ask, under every `guard.mainSeverity`:
+  production code when builder is off, tracking records when scribe is off. The record
+  timestamp check still applies. A Bash command skips such a target and still asks on a
+  later one whose role is on. The session brief names only the edits the guard still
+  asks about, and `SKILL.md` Step 4 has the main session produce builder's report lines
+  for reviewer when builder is off.
 
 ### Unchanged
 
-Role scopes, write rules, model tiers, turn budgets, and every Bash rule. The calling
+Role scopes, subagent write rules, model tiers and turn budgets. Every Bash rule except
+the main session's, which now skips a target whose owning role is off. The calling
 role is still matched with the namespace stripped, so write rules are unchanged.
 
 ### Tests
 
-278 passed (was 232).
+295 passed (was 232).
 
 ## [0.9.3] - 2026-09-07
 

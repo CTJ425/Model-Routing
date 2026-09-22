@@ -178,12 +178,12 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 - `paths.prod`：生產代碼的相對路徑或 Glob 規則，Guard 會據此界定生產代碼範圍。
 - `paths.test`：測試檔案路徑規則，Guard 會嚴禁 `builder` 擅自修改此範圍。
 - `models.<role>`：針對此專案覆寫該角色的分派模型，由 Boss 以 Agent 工具的 `model` 參數帶入（此參數只接受模型別名，例如 `haiku`、`sonnet`、`opus`）。此設定僅作用於分派參數，不會修改插件本體檔案。Claude Code 2.1.251 起，此參數優先於 Agent frontmatter 與環境變數 `CLAUDE_CODE_SUBAGENT_MODEL`（後者只是沒有其他來源時的預設值）；只有再設定 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`（2.1.257 起）時，所有子代理人才會被強制改用 `CLAUDE_CODE_SUBAGENT_MODEL`（未設定則用主會話模型），此處設定隨之失效。2.1.251 以前的版本，`CLAUDE_CODE_SUBAGENT_MODEL` 本身就會蓋過此處設定。
-- `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（四個角色均可獨立關閉）。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。
+- `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（四個角色均可獨立關閉）。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。關閉 `builder` 時，主會話修改生產代碼不再詢問；關閉 `scribe` 時，主會話修改追蹤文檔不再詢問（時間戳檢查仍然生效）。
 - `bookkeeping.enabled`：設為 `false` 時僅啟用模型路由功能（不分派 `scribe`、不維護追蹤文檔、Guard 不套用記錄保護規則）。
 - `bookkeeping.timezone`：寫入記錄時間戳時所採用的 IANA 時區（如 `UTC` 或 `Asia/Taipei`）。
 - `review.policy`：審查觸發策略：`always`（每次實作後均審查）、`risk`（預設，僅在觸發風險時審查）、`never`（不審查，以測試作為唯一門檻）。
 - `review.triggers`：自訂風險觸發器清單（`no_red_green`、`persistent_state`、`authorization`、`boundary`、`silent_calculation`、`control_flow`、`builder_blocker`）。
-- `guard.mainSeverity`：當主會話嘗試直接修改生產代碼或追蹤文檔時的防護層級（`ask`、`deny`、`off`）。
+- `guard.mainSeverity`：當主會話嘗試直接修改生產代碼或追蹤文檔時的防護層級（`ask`、`deny`、`off`）。對應角色（生產代碼為 `builder`、追蹤文檔為 `scribe`）關閉時，此設定對該類寫入不生效。
 - `guard.readKB`：主會話未指定範圍讀取大檔案的警示上限（KB），超過時要求確認；`0` 為關閉。
 - `guard.scoutAt`：主會話在手動搜尋檔案達到指定次數時，主動提示改用 `scout`；`0` 為關閉。
 - `guard.bashWriteDetection`：是否啟用 Bash 檔案寫入啟發式偵測（預設 `true`）。

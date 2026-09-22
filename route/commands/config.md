@@ -81,7 +81,9 @@ free-form question:
    `roles.<role>.enabled`. Off means the guard denies the dispatch, so name what absorbs
    the work: for `builder` and `reviewer` that is this session; for `scribe`, this
    session writes the records unless the user also wants `bookkeeping.enabled=false`;
-   for `scout`, discovery happens in this session under the `guard.readKB` ceiling.
+   for `scout`, discovery happens in this session under the `guard.readKB` ceiling. When
+   builder or scribe is off, the guard also stops asking on this session's writes in that
+   role's scope.
    For `reviewer`, also ask its policy always/risk/never → writes `review.policy`. That
    is a separate axis: `never` means review is not required, while
    `roles.reviewer.enabled=false` means the reviewer cannot run at all.

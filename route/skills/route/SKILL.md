@@ -27,7 +27,9 @@ record why in the project's progress log.
 
 A Lane 0 edit is still a main-session write to production code, so `guard.mainSeverity`
 applies to it — through `Write`/`Edit` and through the shell alike. Confirming that prompt
-is how a Lane 0 call gets recorded; routing around it with `sed -i` is not.
+is how a Lane 0 call gets recorded; routing around it with `sed -i` is not. When
+`roles.builder.enabled` is `false`, this session is the implementer and the guard does
+not ask.
 
 ## Step 0.25 — weigh the job against the dispatch floor
 
@@ -192,7 +194,9 @@ the rework lands two rounds later. Four checks, each cheap, each having caught a
 ## Step 3 — build (sonnet by default)
 
 When `roles.builder.enabled` is `false` the guard denies the dispatch and this session
-writes the code itself, still against the Step 2 input and the same Verify command.
+writes the code itself, still against the Step 2 input and the same Verify command. The
+guard does not ask on those writes: with no builder there is no cheaper path for it to
+name.
 
 Otherwise dispatch `route:builder` with **only** its Step 2 input: the Lane 1 brief, or the Lane 2 spec
 path plus test path. Never paste a spec file's contents — builder reads the file. Do not
@@ -259,6 +263,12 @@ apply that set and state which configured checks justified a skipped review.
 A project may replace this list with the seven trigger IDs in `review.triggers`; an empty list
 means no automatic risk trigger. `review.policy=always` still reviews every builder round.
 
+When `roles.builder.enabled` is `false`, this session produces what builder would
+report: the changed-file list and the `VERIFY:`, `TESTS:` and `LINT:` lines, in
+builder's format, from commands this session ran. Every implementation round of this
+session counts as a builder round for `review.policy`. The review nudge fires only
+when a `builder` dispatch returns, so apply the policy here without it.
+
 Pass reviewer the brief **or** the spec path, plus builder's reported file list and
 `VERIFY:`, `TESTS:`, and `LINT:` lines. Reviewer has no Bash — it reads builder's reported
 command and result rather than re-running anything. The Boss must run the final Verify
@@ -284,7 +294,7 @@ skip is how this step stopped happening.
 | --- | --- |
 | PASS, no findings | go to step 6 |
 | PASS with RISK | record the risk in the project's bug-tracking doc when bookkeeping is enabled; otherwise carry it into the final outcome, then go to step 6 |
-| FAIL, 1st time | write a fix instruction naming file + line + required post-condition; resume the builder you already dispatched (in Claude Code, `SendMessage` to that agent) and send only the fix instruction |
+| FAIL, 1st time | write a fix instruction naming file + line + required post-condition; resume the builder you already dispatched (in Claude Code, `SendMessage` to that agent) and send only the fix instruction; with builder off, apply the fix instruction in this session |
 | FAIL, 2nd time | **stop dispatching.** The defect is in the spec ~80% of the time. Fix the spec, restart from step 3 |
 | FAIL, 3rd time | stop and ask the user. Do not loop |
 | reviewer returned no `VERDICT`, or builder returned no report block | treat as truncated, never as PASS; re-dispatch with a narrower `Files` list or split the task |
@@ -309,7 +319,7 @@ costs context replay on every later turn, so spend it here and nowhere else.
 Skip this step entirely when `bookkeeping.enabled` is `false` — that project keeps no
 tracking docs and there is nothing for scribe to write. Skip it too when
 `roles.scribe.enabled` is `false`: the project keeps records but does not use scribe, so
-write them here.
+write them here; the guard does not ask.
 
 Otherwise dispatch `route:scribe` with the outcome: task id (or `?`), files changed,
 Verify result, test counts when applicable, lint result, reviewer verdict, accepted risks,

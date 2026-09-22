@@ -94,7 +94,7 @@
     },
     "roles": {
       "type": "object",
-      "description": "Per-role dispatch switch. A role with enabled=false is denied by the PreToolUse guard, dropped from the session brief's roster, and not offered by the route skill. Turning every role off leaves the plugin's guards and audit in place while the session does the work itself.",
+      "description": "Per-role dispatch switch. A role with enabled=false is denied by the PreToolUse guard, dropped from the session brief's roster, and not offered by the route skill. The main session's writes in that role's scope no longer ask: production code when builder is off, tracking records when scribe is off. Turning every role off leaves the plugin's guards and audit in place while the session does the work itself.",
       "additionalProperties": false,
       "properties": {
         "scout": { "$ref": "#/definitions/role" },
@@ -129,7 +129,7 @@
       "properties": {
         "mainSeverity": {
           "type": "string",
-          "description": "What happens when the main session writes production code or a record.",
+          "description": "What happens when the main session writes production code or a record. Does not apply to production code when roles.builder.enabled is false, or to records when roles.scribe.enabled is false.",
           "enum": ["ask", "deny", "off"]
         },
         "readKB": {

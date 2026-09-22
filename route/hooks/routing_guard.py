@@ -306,6 +306,19 @@ REASONS = {
     ("builder", "spec"): "Builder implements the spec; it does not amend it. Report the conflict.",
 }
 
+# Which role's write scope a main-session class falls into, when that role is off and
+# the main session absorbs its work instead of being asked about it.
+CLASS_OWNER = {"prod": "builder", "record": "scribe"}
+
+
+def _main_write_absorbed(cls, cfg) -> bool:
+    """-> whether a main-session write of this class is the owning role's job, and that
+    role is turned off, so the main session does it with no ask. `deny` included: with
+    the role off there is no cheaper path left to name."""
+    owner = CLASS_OWNER.get(cls)
+    return bool(owner) and not role_enabled(cfg, owner)
+
+
 RULES = {
     "main": {"prod": "@main", "record": "@main"},
     "builder": {"test": "deny", "doc": "deny", "record": "deny", "spec": "deny"},
@@ -500,11 +513,14 @@ def handle_main_bash(command, project, cfg) -> None:
         if rel is None:
             continue
         cls = classify(rel, cfg)
-        if cls in ("prod", "record"):
-            decision = main_severity(cfg)
-            if decision:
-                respond(decision, "[routing/main] " + REASONS[("main", cls)])
-            sys.exit(0)
+        if cls not in ("prod", "record"):
+            continue
+        if _main_write_absorbed(cls, cfg):
+            continue
+        decision = main_severity(cfg)
+        if decision:
+            respond(decision, "[routing/main] " + REASONS[("main", cls)])
+        sys.exit(0)
     sys.exit(0)
 
 
@@ -598,6 +614,8 @@ def handle_write(role, tool_input, project, cfg) -> None:
         sys.exit(0)
 
     if decision == "@main":
+        if _main_write_absorbed(cls, cfg):
+            sys.exit(0)
         decision = main_severity(cfg)
         if not decision:
             sys.exit(0)

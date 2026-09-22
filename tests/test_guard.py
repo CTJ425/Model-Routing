@@ -352,6 +352,80 @@ def test_discovery_reason_drops_scout_when_disabled(project):
     assert "scout" not in reason(got)
 
 
+# --- a role turned off leaves its work to the main session, with no ask about it ---
+# The main-session ask names the role that would do the work more cheaply. With that role
+# off there is no cheaper path to name, and every edit of the session would prompt.
+
+@pytest.mark.parametrize("level", ["ask", "deny"])
+def test_main_writes_production_code_silently_when_builder_is_off(level, project):
+    with_roles(project, builder=False)
+    got = run_guard({"tool_name": "Write", "agent_type": "main",
+                     "tool_input": {"file_path": "src/a.ts", "content": "x"}},
+                    project, env_extra={"ROUTING_MAIN": level})
+    assert decision(got) is None
+
+
+def test_main_edits_production_code_silently_when_builder_is_off(project):
+    with_roles(project, builder=False)
+    got = run_guard({"tool_name": "Edit", "agent_type": "main",
+                     "tool_input": {"file_path": "src/a.ts",
+                                    "old_string": "1", "new_string": "2"}}, project)
+    assert decision(got) is None
+
+
+def test_main_writes_a_record_silently_when_scribe_is_off(project):
+    with_roles(project, scribe=False)
+    assert decision(write("main", "docs/agent/TASK.md", project, content="x")) is None
+
+
+def test_turning_builder_off_keeps_the_record_ask(project):
+    with_roles(project, builder=False)
+    got = write("main", "docs/agent/TASK.md", project, content="x")
+    assert decision(got) == "ask"
+    assert "tracking record" in reason(got)
+
+
+def test_turning_scribe_off_keeps_the_production_ask(project):
+    with_roles(project, scribe=False)
+    got = write("main", "src/a.ts", project, content="x")
+    assert decision(got) == "ask"
+    assert "production code" in reason(got)
+
+
+def test_a_future_stamp_is_denied_when_scribe_is_off(project):
+    """Turning scribe off moves who writes the record, not what a record may say."""
+    with_roles(project, scribe=False)
+    got = write("main", "docs/agent/TASK.md", project,
+                content="- 2999-01-01 00:00:00 done")
+    assert decision(got) == "deny"
+
+
+def test_a_malformed_roles_block_keeps_the_production_ask(project):
+    """role_enabled fails open to `on`, so the ask stays."""
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["roles"] = ["builder"]
+    write_config(project, cfg)
+    assert decision(write("main", "src/a.ts", project, content="x")) == "ask"
+
+
+@pytest.mark.parametrize("role,command", [
+    ("builder", "sed -i 's/a/b/' src/a.ts"),
+    ("builder", "mkdir -p src/newmod"),
+    ("scribe", "cat > docs/agent/TASK.md <<'EOF'\nx\nEOF"),
+])
+def test_main_bash_write_is_silent_when_its_role_is_off(role, command, project):
+    with_roles(project, **{role: False})
+    assert decision(bash("main", command, project)) is None
+
+
+def test_main_bash_still_asks_on_a_later_target_whose_role_is_on(project):
+    """A target the main session absorbs is skipped, not taken as the whole command."""
+    with_roles(project, builder=False)
+    got = bash("main", "touch src/b.ts && touch docs/agent/TASK.md", project)
+    assert decision(got) == "ask"
+    assert "tracking record" in reason(got)
+
+
 # --- fail-open ---
 
 def test_malformed_payload_exits_clean(project):

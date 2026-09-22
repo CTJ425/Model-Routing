@@ -107,8 +107,7 @@ BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or 
   goes to a subagent even when the task looks trivial.
 - **Roster.** This session plans, writes specs, and adjudicates.{roster_clause}
   Per-role model tiers live in `.claude/route.config.json` (see `/route:config`).
-- **Guards will ask** before this session edits production code{record_clause},
-  dispatches a built-in agent that runs on this session's model (`Explore`, `Plan`,
+- **Guards will ask** before this session {edit_clause}dispatches a built-in agent that runs on this session's model (`Explore`, `Plan`,
   `general-purpose`, `claude`, or no type at all), or issues an unbounded Read
   over {read_kb}KB.
   An `ask` is policy, not an obstacle: take the cheaper path it names."""
@@ -137,6 +136,23 @@ def roster_clause(cfg, bookkeeping: bool) -> str:
         "scoped name (%s)." % ("; ".join(ROSTER_CLAUSE[r] for r in live),
                                ", ".join("`route:%s`" % r for r in live))
     )
+
+
+def edit_clause(cfg, bookkeeping: bool) -> str:
+    """The **Guards will ask** bullet names only the edits the guard still asks about.
+    With `roles.builder.enabled` false the guard absorbs a production-code write into
+    the main session silently, and the same holds for a tracking record with
+    `roles.scribe.enabled` false (see routing_guard._main_write_absorbed).
+    """
+    builder_on = role_enabled(cfg, "builder")
+    records_live = bookkeeping and role_enabled(cfg, "scribe")
+    if builder_on and records_live:
+        return "edits production code or a tracking record,\n  "
+    if builder_on:
+        return "edits production code,\n  "
+    if records_live:
+        return "edits a tracking record,\n  "
+    return ""
 
 
 REVIEW_TRIGGER_TEXT = {
@@ -234,7 +250,7 @@ def emit_brief(payload) -> None:
     text = BRIEF_HEAD.format(
         read_kb=cfg["guard"].get("readKB", 32),
         roster_clause=roster_clause(cfg, bookkeeping),
-        record_clause=" or a tracking record" if bookkeeping else "",
+        edit_clause=edit_clause(cfg, bookkeeping),
     )
     if bookkeeping:
         tasks, bugs = open_counts(project, cfg)
