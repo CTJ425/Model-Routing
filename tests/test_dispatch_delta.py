@@ -39,7 +39,12 @@ def write_jsonl(path, rows):
             fh.write(json.dumps(row) + "\n")
 
 
-def session(tmp_path, launch_result, launch_meta, sub_rows):
+def delivery(origin, text):
+    """A row Claude Code adds to main after a background launch, such as a hand-back."""
+    return {"type": "user", "origin": origin, "message": {"role": "user", "content": text}}
+
+
+def session(tmp_path, launch_result, launch_meta, sub_rows, late_rows=()):
     """-> the single record collect() builds for one route:scout dispatch."""
     main = tmp_path / "s1.jsonl"
     write_jsonl(str(main), [
@@ -48,6 +53,7 @@ def session(tmp_path, launch_result, launch_meta, sub_rows):
                   cache_read=1000),
         tool_result("tu1", launch_result, launch_meta),
         assistant({"type": "text", "text": "ok"}, cache_read=1300),
+        *late_rows,
     ])
     sub = tmp_path / "s1" / "subagents" / "agent-a1"
     write_jsonl(str(sub) + ".jsonl", sub_rows)
@@ -92,6 +98,25 @@ def test_handback_message_is_the_report(tmp_path):
                   ) + [tool_result("h1", "ok"),
                        assistant({"type": "text", "text": "done"})])
     assert rec["report"] == 1200 / CPT
+
+
+def test_background_report_counts_every_row_it_puts_into_main(tmp_path):
+    """Main keeps the launch notice, the framed hand-back (2.1.277+) and the
+    task-notification. Rows for another agent or another dispatch are not this cost."""
+    notice = "<task-notification>\n<tool-use-id>tu1</tool-use-id>\n" + "N" * 800
+    rec = session(tmp_path, "L" * 1000, {"status": "async_launched", "agentId": "a1"},
+                  reading_then({"type": "tool_use", "id": "h1", "name": "SubagentHandback",
+                                "input": {"message": "M" * 300}}),
+                  late_rows=[
+                      delivery({"kind": "peer", "from": "a1", "handback": True}, "P" * 1500),
+                      delivery({"kind": "task-notification"}, notice),
+                      delivery({"kind": "peer", "from": "a9", "handback": True}, "X" * 5000),
+                      delivery({"kind": "task-notification"},
+                               "<task-notification>\n<tool-use-id>tu9</tool-use-id>\n"
+                               + "X" * 5000),
+                  ])
+    assert rec["report"] == (1000 + 1500 + len(notice)) / CPT
+    assert rec["cost"] == (400 + 1000 + 1500 + len(notice)) / CPT
 
 
 def test_text_before_the_last_tool_call_is_not_the_report(tmp_path):

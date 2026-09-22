@@ -31,6 +31,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import statistics
 import sys
 from collections import defaultdict
@@ -99,20 +100,48 @@ def rows(path):
                 continue
 
 
+TOOL_USE_ID_RE = re.compile(r"<tool-use-id>([^<]+)</tool-use-id>")
+
+
+def delivery_key(row, content):
+    """-> the agent id or tool_use_id a later main row delivers for, or None.
+
+    After a background launch the report reaches main as rows of its own: a `peer`
+    message from the subagent (the hand-back, framed since Claude Code 2.1.277) and a
+    `task-notification` naming the dispatch's tool_use_id.
+    """
+    origin = row.get("origin")
+    if not isinstance(origin, dict):
+        return None
+    if origin.get("kind") == "peer":
+        return origin.get("from")
+    if origin.get("kind") == "task-notification" and isinstance(content, str):
+        m = TOOL_USE_ID_RE.search(content)
+        return m.group(1) if m else None
+    return None
+
+
 def scan_main(path):
-    """-> (dispatches, total_assistant_turns).
+    """-> (dispatches, total_assistant_turns, delivered).
 
     dispatches: tool_use_id -> {role, prompt_chars, report_chars, turn_index,
                                 ctx_before, ctx_after, solo}
     `solo` marks a dispatch that was the only tool call in its turn, so the measured
     cache_read delta across it is attributable to the dispatch alone.
+    delivered: agent id or tool_use_id -> chars of the later rows that delivered for it.
     """
     disp, turn = {}, 0
+    delivered = defaultdict(int)
     pending = []  # dispatches awaiting the assistant turn that follows their result
     for row in rows(path):
         msg = row.get("message")
         if not isinstance(msg, dict):
             continue
+
+        if row.get("type") == "user":
+            key = delivery_key(row, msg.get("content"))
+            if key:
+                delivered[key] += text_len(msg.get("content"))
 
         if row.get("type") == "assistant" and msg.get("usage"):
             ctx = msg["usage"].get("cache_read_input_tokens", 0)
@@ -146,7 +175,7 @@ def scan_main(path):
                 d["async"] = (isinstance(result, dict)
                               and result.get("status") == "async_launched")
                 pending.append(d)
-    return disp, turn
+    return disp, turn, delivered
 
 
 def scan_subagent(path):
@@ -180,7 +209,7 @@ def scan_subagent(path):
 
 def collect(session_path):
     """-> list of per-dispatch records for one session."""
-    disp, total_turns = scan_main(session_path)
+    disp, total_turns, delivered = scan_main(session_path)
     if not disp:
         return []
     base = session_path[: -len(".jsonl")]
@@ -200,9 +229,13 @@ def collect(session_path):
             continue
         consumed, sub_turns, sub_report = scan_subagent(jsonl)
         # A background launch's tool_result is the launch notice, and a hand-back's is a
-        # note; the report itself reaches main later. Its size is in the subagent's own
-        # transcript. A foreground tool_result already is the report.
-        report_chars = max(d["report_chars"], sub_report)
+        # note; the report itself reaches main later, in rows that stay in main's context
+        # beside the notice. Without those rows, estimate the report from the subagent's
+        # own transcript. A foreground tool_result already is the report.
+        agent_id = os.path.basename(meta_path)[len("agent-"): -len(".meta.json")]
+        late = delivered.get(meta.get("toolUseId"), 0) + delivered.get(agent_id, 0)
+        report_chars = (d["report_chars"] + late if late
+                        else max(d["report_chars"], sub_report))
         cost = (d["prompt_chars"] + report_chars) / CHARS_PER_TOKEN
         benefit = consumed / CHARS_PER_TOKEN
         remaining = max(total_turns - d["turn_index"], 0)

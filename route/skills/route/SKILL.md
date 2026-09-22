@@ -40,13 +40,13 @@ so on a small job it *is* the bill.
 One illustrative measurement on a bounded single-file task (2026-08-13, opus Boss, haiku
 subagents) was:
 
-| Dispatch | What it did | Cost |
+| Dispatch | What it did | Cost (USD) |
 | --- | --- | --- |
-| `route:scout` | mapped icon usage across a 469-line file | $0.032 |
-| `route:scribe` | appended a few lines to two tracking docs | $0.036 |
+| `route:scout` | mapped icon usage across a 469-line file | 0.032 |
+| `route:scribe` | appended a few lines to two tracking docs | 0.036 |
 
 The append cost more than the mapping. Nothing about the work explains that — the floor
-does. That run came to **$0.77 routed against $0.74 for the same task done entirely by the
+does. That run came to **USD 0.77 routed against USD 0.74 for the same task done entirely by the
 Boss**, for a byte-identical diff. These are environment- and price-table-specific
 examples, not a universal dollar threshold.
 

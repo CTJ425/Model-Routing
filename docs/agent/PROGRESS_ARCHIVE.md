@@ -4,6 +4,33 @@ Older progress entries, prepended from `PROGRESS.md` so newest-first order holds
 
 ---
 
+## 📅 Log: 2026-09-22 18:51:06 CST (0.9.4 — a role turned off hands its writes to the main session)
+
+- **Changed**: route/hooks/routing_guard.py, route/hooks/routing_observe.py,
+  route/skills/route/SKILL.md, route/schema/route.config.schema.json,
+  route/commands/config.md, README.md, tests/test_guard.py, tests/test_observe.py,
+  docs/CHANGELOG.md; new spec docs/agent/specs/route-role-off-main-writes.md
+- **Why**: a check of "builder off, the main session writes the code" found the guard
+  still asked on every main-session production-code write, through `Write`/`Edit` and
+  Bash, and named `builder` as the cheaper path, which the guard denies. Reproduced
+  against the real hook scripts on a temp project. `roles.scribe.enabled=false` had the
+  same defect for tracking records. Fixed by user decision.
+- **What changed**: a main-session write whose owning role is off passes with no ask,
+  under every `guard.mainSeverity` (`deny` included: with the role off, nobody else can
+  write it). Bash skips such a target and keeps scanning, so a later target whose role
+  is on still asks. The session brief's guard line drops the absorbed edit class.
+  SKILL.md Steps 0/3/4/5/6, the schema, `/route:config` and the README say the same;
+  Step 4 has the main session produce builder's report lines for reviewer.
+- **Not changed**: the ask text, subagent write rules, the record timestamp check, and
+  the review nudge (it still fires only when a `builder` dispatch returns).
+- **Review**: Lane 2, reviewer PASS with no findings.
+- **Housekeeping**: `roll_records.py --keep 2` moved the 2026-09-17 10:12:22 entry into
+  `PROGRESS_ARCHIVE.md`.
+- **Tests**: 295 passed, 0 failed (was 278). Against the previous code 12 of the 17 new
+  cases fail (8 guard, 4 observe); the other 5 pin behaviour it already had.
+
+---
+
 ## 📅 Log: 2026-09-17 10:57:36 CST (0.9.4 — role switches: namespace scope, doctor type check)
 
 - **Changed**: route/hooks/_config.py, route/hooks/routing_guard.py,

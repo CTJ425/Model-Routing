@@ -5,6 +5,37 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
+## 📅 Log: 2026-09-22 20:16:37 CST (0.9.4 — Claude Code 2.1.278 check: delta return cost, SKILL `$0`)
+
+- **Changed**: route/scripts/dispatch_delta.py, route/skills/route/SKILL.md,
+  tests/test_dispatch_delta.py, docs/CHANGELOG.md
+- **Why**: the user asked whether the previous session's subagent ran and whether the
+  plugin works on Claude Code 2.1.278. The `route:scribe` dispatch of session 35476d16
+  ran on haiku in the background, made 7 tool calls with no error, and handed back its
+  report. No entry in the 2.1.275-2.1.278 changelog breaks a hook, the guard, the review
+  nudge or the delta script; 295 tests passed and `/route:doctor` failed nothing. Two
+  defects surfaced during the check.
+- **What changed**: `/route:delta` adds to a dispatch's return every later main row that
+  delivers for it (`origin.kind` `peer` from its agent id, or `task-notification` naming
+  its tool_use_id). With no such row it keeps `max(tool_result, subagent report)`.
+  Measured on 35476d16: 3,492 chars in main against 1,060 counted; net +69 -> -539
+  tokens. `SKILL.md` Step 0.25 cost figures no longer start with `$`: `/route:route
+  <args>` had put the arguments in place of `$0`.
+- **Not changed**: the benefit side, `measured`, `--validate` and `scan_subagent`. The
+  replay count of a late row still starts at the dispatch turn, not its delivery turn.
+- **Note**: the user saw no subagent in `claude agents`. Not a 2.1.278 bug: every
+  dispatch on 2.1.274-2.1.278 is `requestShape: background`, and the agent panel hides a
+  completed subagent at once (2.1.232). A 142 s scout was visible while it ran.
+- **Review**: (a) Lane 0. (b) Lane 1, implemented in the main session because the user
+  had asked for no dispatch at that point; reviewer ran afterwards. Reviewer PASS with
+  one RISK, accepted and not filed in BUG_FIX.md (every heading there counts as an open
+  bug): a `task-notification` row is matched only when its content is a string, the only
+  form seen on 2.1.278. If a later version sends a block list, that row stops being
+  counted and the undercount returns silently.
+- **Tests**: 296 passed, 0 failed (was 295). The new test failed before the change.
+
+---
+
 ## 📅 Log: 2026-09-22 19:26:30 CST (0.9.4 — builder runs at effort xhigh)
 
 - **Changed**: route/agents/builder.md, README.md, docs/CHANGELOG.md
@@ -26,30 +57,3 @@ Newest entry at the top, immediately after this header block. Older entries roll
   after the change. A `--agent` main thread does not show the frontmatter effort, so it
   cannot verify this setting; use a real subagent dispatch.
 - **Tests**: 295 passed, 0 failed (unchanged).
-
----
-
-## 📅 Log: 2026-09-22 18:51:06 CST (0.9.4 — a role turned off hands its writes to the main session)
-
-- **Changed**: route/hooks/routing_guard.py, route/hooks/routing_observe.py,
-  route/skills/route/SKILL.md, route/schema/route.config.schema.json,
-  route/commands/config.md, README.md, tests/test_guard.py, tests/test_observe.py,
-  docs/CHANGELOG.md; new spec docs/agent/specs/route-role-off-main-writes.md
-- **Why**: a check of "builder off, the main session writes the code" found the guard
-  still asked on every main-session production-code write, through `Write`/`Edit` and
-  Bash, and named `builder` as the cheaper path, which the guard denies. Reproduced
-  against the real hook scripts on a temp project. `roles.scribe.enabled=false` had the
-  same defect for tracking records. Fixed by user decision.
-- **What changed**: a main-session write whose owning role is off passes with no ask,
-  under every `guard.mainSeverity` (`deny` included: with the role off, nobody else can
-  write it). Bash skips such a target and keeps scanning, so a later target whose role
-  is on still asks. The session brief's guard line drops the absorbed edit class.
-  SKILL.md Steps 0/3/4/5/6, the schema, `/route:config` and the README say the same;
-  Step 4 has the main session produce builder's report lines for reviewer.
-- **Not changed**: the ask text, subagent write rules, the record timestamp check, and
-  the review nudge (it still fires only when a `builder` dispatch returns).
-- **Review**: Lane 2, reviewer PASS with no findings.
-- **Housekeeping**: `roll_records.py --keep 2` moved the 2026-09-17 10:12:22 entry into
-  `PROGRESS_ARCHIVE.md`.
-- **Tests**: 295 passed, 0 failed (was 278). Against the previous code 12 of the 17 new
-  cases fail (8 guard, 4 observe); the other 5 pin behaviour it already had.

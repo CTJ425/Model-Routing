@@ -69,6 +69,18 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
   later one whose role is on. The session brief names only the edits the guard still
   asks about, and `SKILL.md` Step 4 has the main session produce builder's report lines
   for reviewer when builder is off.
+- `/route:delta` counted a background dispatch's return as the larger of its launch
+  notice and its report, so it left out most of what the main session keeps. Main holds
+  the launch notice plus later rows of its own: the hand-back, which Claude Code 2.1.277+
+  wraps in a subagent-output frame, and the task-notification. On one 2.1.278 scribe
+  dispatch that came to 3,492 characters against 1,060 counted, and the net turned from
+  +69 to -539 tokens. The cost side now adds every row whose `origin` is a `peer`
+  message from the dispatch's agent or a `task-notification` for its tool_use_id.
+  Without such rows it estimates as before.
+- `SKILL.md` Step 0.25 wrote its cost example with a dollar sign before each figure.
+  Claude Code replaces `$0` in a skill with the first invocation argument, so
+  `/route:route <args>` put the arguments into the table. The figures now sit in a
+  `Cost (USD)` column and read `USD 0.77`.
 
 ### Unchanged
 
@@ -78,7 +90,7 @@ role is still matched with the namespace stripped, so write rules are unchanged.
 
 ### Tests
 
-295 passed (was 232).
+296 passed (was 232).
 
 ## [0.9.3] - 2026-09-07
 
