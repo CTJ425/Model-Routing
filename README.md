@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 路由分級、順序排定、規格/簡報撰寫、結果裁決 | 撰寫生產程式碼、直接編輯追蹤記錄 |
 | **scout** | 子代理人 (Subagent) | `haiku` (low effort, 80 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
-| **builder** | 子代理人 (Subagent) | `sonnet` (high effort, 240 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
+| **builder** | 子代理人 (Subagent) | `sonnet` (xhigh effort, 240 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
 | **reviewer** | 子代理人 (Subagent) | `sonnet` (high effort, 80 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
 | **scribe** | 子代理人 (Subagent) | `haiku` (low effort, 90 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
 
@@ -112,7 +112,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 3. **Step 2 — 規格與簡報撰寫 (`Boss` | Session 模型)**：
    - 高階模型撰寫任務契約、完整 `Files` 異動檔案清單、精確的 `Verify` 驗證指令與 `Non-goals`（非目標）。Boss 絕對不直接編寫生產代碼。
 
-4. **Step 3 — 程式碼實作 (`builder` | Sonnet 預設，High Effort)**：
+4. **Step 3 — 程式碼實作 (`builder` | Sonnet 預設，XHigh Effort)**：
    - 讀取 Spec/Brief，嚴格在指定的 `Files` 清單內實作變更，並照字面（Verbatim）原樣執行驗證指令與測試套件。
 
 5. **Step 4 — 審查與風險檢查 (`reviewer` | Sonnet 預設，High Effort)**：

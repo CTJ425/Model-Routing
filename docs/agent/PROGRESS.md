@@ -5,6 +5,30 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
+## 📅 Log: 2026-09-22 19:26:30 CST (0.9.4 — builder runs at effort xhigh)
+
+- **Changed**: route/agents/builder.md, README.md, docs/CHANGELOG.md
+- **Why**: the user asked whether `/route:config` can set a role's effort. It cannot: the
+  Agent tool takes a per-call `model` override but has no `effort` parameter, so the agent
+  frontmatter is the only place a role's effort is set, and it is plugin-wide. By user
+  decision the plugin default changes instead.
+- **What changed**: `builder` frontmatter `effort: high` -> `effort: xhigh`. The README
+  role table and Step 3 line say xhigh. CHANGELOG 0.9.4 gains a `### Changed` entry.
+- **Not changed**: `reviewer` stays at `high`. `scout` and `scribe` keep `low`, which
+  Claude Code drops on Haiku 4.5 (the model has no effort support; SubagentStop reports
+  no effort for `route:scribe`). No `effort` key in the config schema or `/route:config`.
+- **Review**: Lane 0, reviewer not dispatched. `no_red_green` checked: a real
+  `route:builder` dispatch of the repo copy (`claude -p --plugin-dir route`, installed
+  plugin disabled) reported `CLAUDE_EFFORT=xhigh` and SubagentStop `effort: xhigh` on
+  claude-sonnet-5; the installed 0.9.4 copy's builder dispatch in this project's
+  `.claude/routing/dispatch.jsonl` reports `high`. No other trigger applies.
+- **Note**: `claude -p --agent route:builder` reported `CLAUDE_EFFORT=high` before and
+  after the change. A `--agent` main thread does not show the frontmatter effort, so it
+  cannot verify this setting; use a real subagent dispatch.
+- **Tests**: 295 passed, 0 failed (unchanged).
+
+---
+
 ## 📅 Log: 2026-09-22 18:51:06 CST (0.9.4 — a role turned off hands its writes to the main session)
 
 - **Changed**: route/hooks/routing_guard.py, route/hooks/routing_observe.py,
@@ -29,33 +53,3 @@ Newest entry at the top, immediately after this header block. Older entries roll
   `PROGRESS_ARCHIVE.md`.
 - **Tests**: 295 passed, 0 failed (was 278). Against the previous code 12 of the 17 new
   cases fail (8 guard, 4 observe); the other 5 pin behaviour it already had.
-
----
-
-## 📅 Log: 2026-09-17 10:57:36 CST (0.9.4 — role switches: namespace scope, doctor type check)
-
-- **Changed**: route/hooks/_config.py, route/hooks/routing_guard.py,
-  route/hooks/routing_observe.py, route/scripts/routing_doctor.py, tests/test_guard.py,
-  tests/test_observe.py, tests/test_doctor.py, docs/CHANGELOG.md
-- **Why**: a check of the role on/off switches, run against the real hook scripts,
-  found every documented path working and two gaps. Fixed by user decision.
-  - `roles.<role>.enabled=false` also denied another plugin's agent of the same name
-    (`other:builder`): `role_enabled` stripped any namespace, contrary to its own
-    docstring.
-  - A switch the hooks cannot read failed open with no sign. `"enabled": "false"`,
-    `"roles": {"builder": false}` and a misspelled key or role all left the role on, and
-    `/route:doctor` reported "all four roles may be dispatched".
-- **What changed**: `_config.route_role` names a route role only for a bare name or the
-  `route` namespace. The guard's dispatch check and the review nudge use it. The caller
-  side (`agent_type`, which picks the write rules) still strips any namespace; out of
-  scope here. `role_enabled` also returns true for a `roles` value that is not an object:
-  the hooks crashed there, which cost the session its brief. The doctor's `roles` check
-  reads the file as written and FAILs on each unreadable switch, naming the state the
-  hooks actually use.
-- **Not changed**: what a well-formed `false` does; the hooks still fail open on a
-  malformed one, and the doctor is where that shows.
-- **Housekeeping**: `roll_records.py --keep 2` moved the 0.9.3 entry into
-  `PROGRESS_ARCHIVE.md`.
-- **Tests**: 278 passed, 0 failed (was 254), also on Python 3.8. Against the previous
-  code 20 of the new cases fail (8 doctor, 9 guard, 3 observe); the other 4 pin behaviour
-  it already had.

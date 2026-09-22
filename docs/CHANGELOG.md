@@ -6,6 +6,14 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
 
 ## [0.9.4] - 2026-09-17
 
+### Changed
+
+- `builder` now runs at `effort: xhigh` (was `high`). The agent frontmatter is the only
+  place a role's effort is set: the Agent tool has no `effort` parameter, so
+  `/route:config` cannot change it per project. `reviewer` stays at `high`. `scout` and
+  `scribe` keep `low`, which Claude Code drops on Haiku 4.5 because that model has no
+  effort support; it applies only when `models.<role>` names a model that does.
+
 ### Fixed
 
 - The subagent model precedence now matches Claude Code 2.1.251+: the per-invocation
