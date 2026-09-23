@@ -103,16 +103,16 @@ USD) for the V4 task. Compare them with the Sonnet reference from 2026-09-22:
 
 | Role | Model | Turns | Out | CacheR | USD (list price) |
 | --- | --- | --- | --- | --- | --- |
-| builder | claude-sonnet-5 / high | 91 | 10,540 | 4,536,187 | 1.35 |
-| reviewer | claude-sonnet-5 / high | 26 | 6,884 | 551,271 | 0.41 |
-| reviewer | claude-sonnet-5 / high | 17 | 7,020 | 303,373 | 0.29 |
-| builder | claude-opus-5-5 / medium | 7 | 952 | 61,652 | 0.11 |
-| reviewer | claude-opus-5-5 / medium | 11 | 1,852 | 105,650 | 0.21 |
+| builder | claude-sonnet-5 / high | 54 | 10,200 | 2,768,163 | 0.84 |
+| reviewer | claude-sonnet-5 / high | 11 | 6,805 | 255,253 | 0.20 |
+| reviewer | claude-sonnet-5 / high | 9 | 6,974 | 166,792 | 0.18 |
+| builder | claude-opus-5-5 / medium | 9 | 1,074 | 92,230 | 0.11 |
+| reviewer | claude-opus-5-5 / medium | 7 | 1,819 | 70,116 | 0.14 |
 
 One task is a single sample of a different task, so it shows only whether the numbers
 are plausible. The real comparison is T7's paired run.
 
-- **Result**: Recorded above. Opus/medium on T4 (a 6-line prose edit): builder 7 turns, $0.11; reviewer 11 turns, $0.21. Plausible; T4 is much smaller than the 2026-09-22 reference task, so no cost conclusion.
+- **Result**: Recorded above. Opus/medium on T4 (a 6-line prose edit): builder 9 turns, $0.11 (includes a later probe resume); reviewer 7 turns, $0.14. Table recomputed after the B1 fix (`d2ad296`); the first figures counted each message once per transcript row. Plausible; T4 is much smaller than the 2026-09-22 reference task, so no cost conclusion.
 
 ---
 
