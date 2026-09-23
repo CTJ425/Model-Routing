@@ -4,7 +4,7 @@ All notable changes to the `route` plugin. This file is the source of truth from
 onward; releases 0.9.0 and earlier live in the git tags and their GitHub Releases, and
 the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its archive.
 
-## [0.9.4] - 2026-09-17
+## [0.10.0] - 2026-09-23
 
 ### Changed
 
