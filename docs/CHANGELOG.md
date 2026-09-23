@@ -18,22 +18,9 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
   is an estimate (about 56k–89k), not a measurement. Unknown context keeps the ask, and
   `mainSeverity: deny` always applies.
 - SKILL.md Lane 0 covers up to three known files and about 100 changed lines when the
-  failing tests already exist and the context is under `guard.builderAtK`. A reviewer RISK on persistent state, a silent
-  calculation, authorization or a boundary is fixed now or named in the outcome with a
-  one-line reason, instead of only being recorded.
-
-### Added
-
-- The guard denies a route-role dispatch that would run on a tier other than
-  `models.<role>`: a `model` parameter that differs, or no parameter when the agent
-  file's default differs. A replay found 1 session in 4 omitting the parameter, so a
-  role configured for Sonnet ran on Opus. Skipped under `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`
-  and for a config value that is not an alias.
-- A Stop hook blocks the first Stop after a production-code write (`Write`, `Edit`,
-  `NotebookEdit`, from the main session or a subagent) with no later `reviewer`
-  dispatch, until the session dispatches the reviewer or names the trigger it checked.
-  It blocks once per batch of writes and never when `stop_hook_active` is set,
-  `review.policy` is `never`, or `review.nudge` is `false`. Bash writes are not tracked.
+  failing tests already exist and the context is under `guard.builderAtK`. A reviewer
+  RISK on persistent state, a silent calculation, authorization or a boundary is fixed
+  now or named in the outcome with a one-line reason, instead of only being recorded.
 
 - `builder` and `reviewer` now default to `model: opus`, `effort: medium` (were
   `sonnet` at `high`). On Claude Code 2.1.280 the `opus` alias resolves to
@@ -52,8 +39,33 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
   pricing key behind each model's cost, so a model priced by a family fallback is
   visible.
 
+### Added
+
+- The guard denies a route-role dispatch that would run on a tier other than
+  `models.<role>`: a `model` parameter that differs, or no parameter when the agent
+  file's default differs. A replay found 1 session in 4 omitting the parameter, so a
+  role configured for Sonnet ran on Opus. Skipped under `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`
+  and for a config value that is not an alias.
+- A Stop hook blocks the first Stop after a production-code write (`Write`, `Edit`,
+  `NotebookEdit`, from the main session or a subagent) with no later `reviewer`
+  dispatch, until the session dispatches the reviewer or names the trigger it checked.
+  It blocks once per batch of writes and never when `stop_hook_active` is set,
+  `review.policy` is `never`, or `review.nudge` is `false`. Bash writes are not tracked.
+- Every builder and reviewer dispatch carries its task: SKILL.md Steps 3 and 4 put
+  `Task: <id>` on the brief's first line and the id at the start of the Agent
+  `description`.
+- `routing_audit.py --by-task` groups subagent cost by that id: builder and reviewer
+  dispatches, builder resumes, turns, cache reads, output, USD and USD by role. A resume
+  is a user entry with `origin.kind: "coordinator"`, confirmed on a real resumed builder.
+  Main-session cost is stated once, not split. The default output is unchanged.
+
 ### Fixed
 
+- `routing_audit.py` counted one API message once per transcript row. Claude Code writes
+  a message as one row per content block, all sharing `message.id`, and streams the
+  subagent rows with growing usage. Costs were about 2x high. The audit now counts each
+  id once from its last row and matches `claude -p` `total_cost_usd`; `dispatch_delta.py`
+  counts turns per message and settles `solo` across all rows of a message.
 - The subagent model precedence now matches Claude Code 2.1.251+: the per-invocation
   `model` parameter outranks the agent frontmatter, which outranks
   `CLAUDE_CODE_SUBAGENT_MODEL`. Only `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (2.1.257+) puts
@@ -122,13 +134,20 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
 
 ### Unchanged
 
-Role scopes, subagent write rules, model tiers and turn budgets. Every Bash rule except
-the main session's, which now skips a target whose owning role is off. The calling
-role is still matched with the namespace stripped, so write rules are unchanged.
+Role scopes, subagent write rules and turn budgets. Every Bash rule except the main
+session's, which now skips a target whose owning role is off, and applies
+`guard.builderAtK` to production code. The calling role is still matched with the
+namespace stripped, so write rules are unchanged.
+
+### Upgrading
+
+No re-init is needed. A project that pins `models.builder` or `models.reviewer` to
+`sonnet` keeps Sonnet, and the guard now enforces it; set them to `opus` (or remove
+them) to run the new default.
 
 ### Tests
 
-296 passed (was 232).
+346 passed (was 232 at 0.9.3).
 
 ## [0.9.3] - 2026-09-07
 
