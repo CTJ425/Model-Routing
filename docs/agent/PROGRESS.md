@@ -5,6 +5,17 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
+## 📅 Log: 2026-09-23 17:01:05 CST (0.9.4 — builder off by default, model tiers enforced, review gate at Stop)
+
+- **Changed**: route/hooks/_config.py, route/hooks/routing_guard.py, route/hooks/routing_observe.py, route/hooks/hooks.json, route/scripts/routing_doctor.py, route/schema/route.config.schema.json, route/skills/route/SKILL.md, route/commands/config.md, README.md, docs/CHANGELOG.md, tests/conftest.py, tests/test_guard.py, tests/test_observe.py, tests/test_doctor.py, .claude/route.config.json
+- **Why**: replays under an Opus 5.5 main session (docs/field-reports/2026-09-23-*, stock-pnl-web replay $22.05) found a builder cost 40–50% more with no measured gain, `models.<role>` ignored in 1 of 4 sessions, review skipped on a silent-calculation task in 2 of 3, and a reviewer RISK that became production defect BUG-036 recorded and shipped 3 times.
+- **Result**: `roles.builder.enabled` defaults to false (this project too). The guard denies a route-role dispatch that would run on a tier other than `models.<role>`. A Stop hook blocks the first Stop after unreviewed production writes. SKILL.md widens Lane 0 to three known files with tests written and requires a persistent-state / silent-calculation / authorization / boundary RISK to be fixed or named with a reason.
+- **Verify**: PASS — `uvx --python python3 pytest -q` — 335 passed, 0 failed (was 314).
+- **Review**: Lane 2, builder off (main session implemented). Reviewer FAIL: worktree paths did not arm the gate, stale state carried across Stops; fixed. Re-review PASS with two RISKs: CRLF/BOM agent files — fixed; writes made in the continuation after a block are not gated again — accepted, so the gate can never loop.
+- **Commits**: 0cb442a
+
+---
+
 ## 📅 Log: 2026-09-23 10:43:36 CST (0.9.4 — Opus 5.5 verification; T2–T4 task identity and --by-task)
 
 - **Changed**: route/skills/route/SKILL.md, route/scripts/routing_audit.py, route/commands/audit.md, tests/test_audit.py, docs/20260923.md, docs/20260923-verification.md
