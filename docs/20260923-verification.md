@@ -27,7 +27,7 @@ grep -E '^(model|effort):' ~/.claude/plugins/cache/route/route/0.9.4/agents/{bui
 - **Pass**: `SAME`; both files show `model: opus` and `effort: medium`.
 - **If it fails**: `claude plugin uninstall route@route --keep-data && claude plugin install route@route`,
   then restart the session.
-- **Result**:
+- **Result**: PASS (2026-09-23) — `SAME`; builder and reviewer both show `model: opus`, `effort: medium`.
 
 ## V2 — nothing overrides the alias
 
@@ -37,7 +37,7 @@ env | grep -E 'ANTHROPIC_DEFAULT_OPUS_MODEL|CLAUDE_CODE_SUBAGENT_MODEL' || echo 
 ```
 
 - **Pass**: version is 2.1.280 or later; `no overrides`.
-- **Result**:
+- **Result**: PASS — `2.1.280 (Claude Code)`; `no overrides`.
 
 ## V3 — doctor
 
@@ -46,7 +46,7 @@ Run `/route:doctor`.
 - **Pass**: `[PASS] models scout=haiku builder=opus reviewer=opus scribe=haiku.` and
   `[PASS] effort builder and reviewer run their default model.` The `dispatch log`
   warning about rows with no role existed before this change and is expected.
-- **Result**:
+- **Result**: PASS — 0 failed, 1 warning (the expected `dispatch log` no-role warning, 29 of 43 rows), 9 passed; `models` and `effort` lines as expected.
 
 ## V4 — a real builder and reviewer dispatch run Opus 5.5 at medium
 
@@ -84,7 +84,7 @@ EOF
   - `claude-opus-5` → the alias resolved to Opus 5; recheck V2.
   - `claude-sonnet-5` → the dispatch passed `model: sonnet`; check `.claude/route.config.json`.
   - `effort=xhigh` or `effort=high` → the old frontmatter is still loaded; recheck V1.
-- **Result**:
+- **Result**: PASS — `2026-09-23T10:31:13+0800 route:builder effort=medium {'claude-opus-5-5': 7}`; `2026-09-23T10:31:55+0800 route:reviewer effort=medium {'claude-opus-5-5': 11}`. Task T4 done: Verify `step3=1 step4=1`, reviewer PASS with 3 RISK findings.
 
 ## V5 — audit prices Opus 5.5 by its own key
 
@@ -94,7 +94,7 @@ CLAUDE_PROJECT_DIR=$PWD python3 ~/.claude/plugins/cache/route/route/0.9.4/script
 
 - **Pass**: the cost-by-model table shows
   `claude-opus-5-5 ... (priced as claude-opus-5-5)`. No model shows as unpriced.
-- **Result**:
+- **Result**: PASS — `claude-opus-5-5 1.49 100.0% (priced as claude-opus-5-5)`; no unpriced model.
 
 ## V6 — record the first Opus run for the T7 comparison
 
@@ -106,13 +106,13 @@ USD) for the V4 task. Compare them with the Sonnet reference from 2026-09-22:
 | builder | claude-sonnet-5 / high | 91 | 10,540 | 4,536,187 | 1.35 |
 | reviewer | claude-sonnet-5 / high | 26 | 6,884 | 551,271 | 0.41 |
 | reviewer | claude-sonnet-5 / high | 17 | 7,020 | 303,373 | 0.29 |
-| builder | claude-opus-5-5 / medium | | | | |
-| reviewer | claude-opus-5-5 / medium | | | | |
+| builder | claude-opus-5-5 / medium | 7 | 952 | 61,652 | 0.11 |
+| reviewer | claude-opus-5-5 / medium | 11 | 1,852 | 105,650 | 0.21 |
 
 One task is a single sample of a different task, so it shows only whether the numbers
 are plausible. The real comparison is T7's paired run.
 
-- **Result**:
+- **Result**: Recorded above. Opus/medium on T4 (a 6-line prose edit): builder 7 turns, $0.11; reviewer 11 turns, $0.21. Plausible; T4 is much smaller than the 2026-09-22 reference task, so no cost conclusion.
 
 ---
 
