@@ -30,7 +30,7 @@ Report either as fact, not as a suggestion to unset it.
 
 ## Showing
 
-Print which of the four roles are on (`roles.<role>.enabled`, default true), the current
+Print which of the four roles are on (`roles.<role>.enabled`; `builder` defaults to false, the others to true), the current
 `models` mapping, `review.policy`, bookkeeping enabled/disabled state,
 `language.artifacts`, and any non-default `guard` values. Do not dump the whole file.
 

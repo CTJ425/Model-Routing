@@ -12,7 +12,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Whether this role may be dispatched. Default true."
+          "description": "Whether this role may be dispatched. Default true, except builder, which defaults to false."
         }
       }
     }

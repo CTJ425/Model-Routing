@@ -77,7 +77,7 @@ def test_brief_includes_scout_in_roster_by_default(project):
 
 def with_roles(project, **enabled):
     cfg = json.loads(json.dumps(BASE_CONFIG))
-    cfg["roles"] = {role: {"enabled": state} for role, state in enabled.items()}
+    cfg["roles"].update({role: {"enabled": state} for role, state in enabled.items()})
     write_config(project, cfg)
 
 
@@ -394,3 +394,98 @@ def test_a_reported_role_is_still_recorded_verbatim(project):
     rows = [json.loads(line) for line in
             (project / ".claude" / "routing" / "dispatch.jsonl").read_text().splitlines()]
     assert rows[0]["agent_type"] == "route:scout"
+
+
+# --- review gate at Stop ---
+
+def wrote(project, rel, agent_type=""):
+    run_observe({"hook_event_name": "PostToolUse", "tool_name": "Edit",
+                 "agent_type": agent_type, "session_id": "t1",
+                 "tool_input": {"file_path": str(project / rel)}}, project)
+
+
+def stop(project, active=False):
+    return run_observe({"hook_event_name": "Stop", "session_id": "t1",
+                        "stop_hook_active": active}, project)
+
+
+def test_stop_is_blocked_after_an_unreviewed_production_write(project):
+    wrote(project, "src/a.ts")
+    got = stop(project)
+    assert got["decision"] == "block"
+    assert "src/a.ts" in got["reason"]
+    assert "route:reviewer" in got["reason"]
+
+
+def test_a_reviewer_dispatch_clears_the_gate(project):
+    wrote(project, "src/a.ts")
+    dispatch_return(project, "route:reviewer")
+    assert not stop(project)
+
+
+def test_the_gate_blocks_once_then_lets_stop_through(project):
+    wrote(project, "src/a.ts")
+    assert stop(project)["decision"] == "block"
+    assert not stop(project)
+
+
+def test_stop_hook_active_is_never_blocked(project):
+    wrote(project, "src/a.ts")
+    assert not stop(project, active=True)
+
+
+def test_a_test_file_write_does_not_arm_the_gate(project):
+    wrote(project, "src/a.test.ts")
+    assert not stop(project)
+
+
+def test_a_builder_write_arms_the_gate(project):
+    wrote(project, "src/a.ts", agent_type="route:builder")
+    assert stop(project)["decision"] == "block"
+
+
+def test_the_gate_respects_review_policy_never(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"policy": "never"}
+    write_config(project, cfg)
+    wrote(project, "src/a.ts")
+    assert not stop(project)
+
+
+def test_with_reviewer_off_the_gate_asks_for_a_self_review(project):
+    with_roles(project, reviewer=False)
+    wrote(project, "src/a.ts")
+    got = stop(project)
+    assert "review the diff yourself" in got["reason"]
+
+
+def test_a_worktree_write_arms_the_gate(project):
+    wrote(project, ".claude/worktrees/wt/src/a.ts")
+    assert "src/a.ts" in stop(project)["reason"]
+
+
+def test_a_notebook_write_arms_the_gate(project):
+    run_observe({"hook_event_name": "PostToolUse", "tool_name": "NotebookEdit",
+                 "agent_type": "", "session_id": "t1",
+                 "tool_input": {"notebook_path": str(project / "src/n.ipynb")}}, project)
+    assert stop(project)["decision"] == "block"
+
+
+def test_a_scout_dispatch_does_not_clear_the_gate(project):
+    wrote(project, "src/a.ts")
+    dispatch_return(project, "route:scout")
+    assert stop(project)["decision"] == "block"
+
+
+def test_the_gate_respects_review_nudge_false(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"nudge": False}
+    write_config(project, cfg)
+    wrote(project, "src/a.ts")
+    assert not stop(project)
+
+
+def test_a_passing_stop_does_not_carry_writes_into_the_next_turn(project):
+    wrote(project, "src/a.ts")
+    assert not stop(project, active=True)
+    assert not stop(project)

@@ -51,6 +51,17 @@
         ]
       },
       {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py"],
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Agent|Task",
         "hooks": [
           {
@@ -76,6 +87,19 @@
       }
     ],
     "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/routing_observe.py"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
       {
         "matcher": "",
         "hooks": [

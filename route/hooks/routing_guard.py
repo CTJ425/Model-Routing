@@ -8,9 +8,11 @@ Four jobs, selected by tool_name.
                       file read once is re-billed on every remaining turn. Bounded
                       reads (`limit` set) always pass.
   Agent|Task        — polices who gets dispatched. A role turned off in
-                      `roles.<role>.enabled` is denied outright; the built-in
-                      discovery agents inherit the caller's model, so they do
-                      scout's job at the caller's price.
+                      `roles.<role>.enabled` is denied outright, and so is a
+                      route role that would run on a tier other than
+                      `models.<role>`; the built-in discovery agents inherit
+                      the caller's model, so they do scout's job at the
+                      caller's price.
   Write|Edit|...    — polices what a role may write, and rejects a future-dated
                       timestamp in a tracking record.
   Bash              — best-effort detection of writes that route around the file
@@ -84,6 +86,29 @@ DISABLED_ROLE_REASON = (
     ".claude/route.config.json. Do this work another way, or re-enable the role with "
     "`/route:config roles.{role}.enabled=true`."
 )
+
+# `models.<role>` only takes effect when the main session passes it as `model` on the
+# Agent call; without it the agent's frontmatter tier runs. A replay found 1 session in 4
+# omitting it, so a configured Sonnet role silently ran on Opus.
+MODEL_ALIASES = {"haiku", "sonnet", "opus"}
+AGENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents")
+MODEL_REASON = (
+    "`models.{role}` is `{want}` in .claude/route.config.json, but this dispatch would run "
+    "`{got}` ({source}). Dispatch it again with `model: \"{want}\"`."
+)
+
+
+def frontmatter_model(role: str):
+    """-> the `model:` alias in this plugin's agent file for `role`, or None."""
+    try:
+        with open(os.path.join(AGENTS_DIR, role + ".md"), encoding="utf-8") as fh:
+            head = fh.read(2048).lstrip("\ufeff").replace("\r\n", "\n")
+    except OSError:
+        return None
+    block = re.match(r"---\n(.*?)\n---", head, re.S)  # the frontmatter block only
+    m = block and re.search(r"^model:\s*([A-Za-z0-9._-]+)\s*$", block.group(1), re.M)
+    return m.group(1).lower() if m else None
+
 
 # Built-in agent types that run on this session's model, or near it, with no tier of
 # their own. Matched exactly: a plugin agent such as `other:claude` declares its own.
@@ -442,6 +467,16 @@ def handle_dispatch(role, tool_input, cfg) -> None:
     if spawned_role and not role_enabled(cfg, spawned_role):
         respond("deny", "[routing/%s] " % role + DISABLED_ROLE_REASON.format(
             name=spawned or spawned_role, role=spawned_role))
+    if spawned_role and not os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"):
+        want = str((cfg.get("models") or {}).get(spawned_role) or "").strip().lower()
+        given = str(tool_input.get("model") or "").strip().lower()
+        got = given or frontmatter_model(spawned_role)
+        # Only an alias can be compared: the Agent tool takes nothing else.
+        if want in MODEL_ALIASES and got and got != want:
+            source = ("the `model` parameter" if given
+                      else "no `model` parameter, so the agent file's default")
+            respond("deny", "[routing/%s] " % role + MODEL_REASON.format(
+                role=spawned_role, want=want, got=got, source=source))
     name = spawned or DEFAULT_AGENT
     if name.lower() in DISCOVERY_AGENTS:
         template = (DISCOVERY_REASON if role_enabled(cfg, "scout")

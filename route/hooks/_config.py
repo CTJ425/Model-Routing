@@ -76,7 +76,10 @@ DEFAULTS = {
         "bashWriteDetection": True,
     },
     "scout": {"enabled": True},
-    "roles": {r: {"enabled": True} for r in ROUTE_ROLES},
+    # builder is off by default: under an Opus-class main session, replays of real tasks
+    # (docs/field-reports/2026-09-23-*) cost 40-50% more with a builder and measured no
+    # gain in accuracy. A project that wants one turns it on.
+    "roles": {r: {"enabled": r != "builder"} for r in ROUTE_ROLES},
     "review": {"policy": "risk", "nudge": True},
     "audit": {"charsPerToken": 4.0},
 }

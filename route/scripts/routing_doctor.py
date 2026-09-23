@@ -330,6 +330,10 @@ def check_roles(cfg: dict) -> None:
     if not off:
         check("PASS", "roles", "all four roles may be dispatched.")
         return
+    if all(not DEFAULTS["roles"][r]["enabled"] for r in off):
+        check("PASS", "roles", "%s off by default, so the main session implements; "
+              "the other roles may be dispatched." % ", ".join(off))
+        return
     # Off is a valid configuration, not a fault: report it so a denied dispatch is
     # never a surprise.
     check("WARN", "roles",

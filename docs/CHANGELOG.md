@@ -8,6 +8,30 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
 
 ### Changed
 
+- `builder` is off by default (`roles.builder.enabled` defaults to `false`); the other
+  roles stay on. Replays of real tasks under an Opus 5.5 main session cost 40–50% more
+  with a builder, took longer, and measured no gain in accuracy
+  (`docs/field-reports/2026-09-23-*`). The main session implements, and its production
+  writes no longer ask. A project that wants a builder sets `roles.builder.enabled=true`.
+  `/route:doctor` reports the default roster as PASS.
+- SKILL.md Lane 0 covers up to three known files and about 100 changed lines when the
+  failing tests already exist. A reviewer RISK on persistent state, a silent
+  calculation, authorization or a boundary is fixed now or named in the outcome with a
+  one-line reason, instead of only being recorded.
+
+### Added
+
+- The guard denies a route-role dispatch that would run on a tier other than
+  `models.<role>`: a `model` parameter that differs, or no parameter when the agent
+  file's default differs. A replay found 1 session in 4 omitting the parameter, so a
+  role configured for Sonnet ran on Opus. Skipped under `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`
+  and for a config value that is not an alias.
+- A Stop hook blocks the first Stop after a production-code write (`Write`, `Edit`,
+  `NotebookEdit`, from the main session or a subagent) with no later `reviewer`
+  dispatch, until the session dispatches the reviewer or names the trigger it checked.
+  It blocks once per batch of writes and never when `stop_hook_active` is set,
+  `review.policy` is `never`, or `review.nudge` is `false`. Bash writes are not tracked.
+
 - `builder` and `reviewer` now default to `model: opus`, `effort: medium` (were
   `sonnet` at `high`). On Claude Code 2.1.280 the `opus` alias resolves to
   `claude-opus-5-5`, whose cache reads cost the same per token as Sonnet 5's; cache reads

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Makes routing observable, so "we delegate" is a measurable claim and not a belief.
 
-Five jobs, selected by hook_event_name:
+Six jobs, selected by hook_event_name:
 
   SessionStart                  -> put the routing rule in context. `route` is a skill,
       so it only runs if the main session decides to load it, and nothing else prompts
@@ -23,6 +23,12 @@ Five jobs, selected by hook_event_name:
       not its result, so the wording says "plan the review" there and "review now"
       only when the tool result really is the agent's.
 
+  PostToolUse(Write|Edit|NotebookEdit) + Stop -> remember the production files written
+      since the last `reviewer` dispatch, and block the first Stop while that list is
+      not empty. Replays found the review skipped on a silent-calculation task in 2 of 3
+      sessions; the builder-return nudge cannot catch it once builder is off. One block,
+      then Stop passes: a one-line "trigger checked, none fires" is a valid answer.
+
   SessionEnd                    -> delete this session's state files.
 
 Env overrides:
@@ -38,8 +44,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import (  # noqa: E402
-    DEFAULT_REVIEW_TRIGGERS, ROUTE_ROLES, load_config, normalize_role, project_dir,
-    role_enabled, route_role,
+    DEFAULT_REVIEW_TRIGGERS, ROUTE_ROLES, load_config, matches_any, normalize_role,
+    project_dir, rel_path, role_enabled, route_role, strip_worktree,
 )
 
 REPEAT_EVERY = 8
@@ -347,6 +353,75 @@ def handle_dispatch_return(payload) -> None:
     }}))
 
 
+WRITE_TOOLS = ("Write", "Edit", "NotebookEdit")
+
+
+def _pending_path(payload, d: str):
+    session = payload.get("session_id")
+    return os.path.join(d, "state", "%s.review" % session) if session else None
+
+
+def note_write(payload, d: str) -> None:
+    """Record a production-code write, from the main session or any subagent."""
+    path = _pending_path(payload, d)
+    tool_input = payload.get("tool_input") or {}
+    target = tool_input.get("file_path") or tool_input.get("notebook_path")
+    if not path or not target:
+        return
+    project = project_dir(payload)
+    cfg = load_config(project)
+    rel = strip_worktree(rel_path(target, project))
+    paths = cfg.get("paths") or {}
+    if not rel or not matches_any(rel, paths.get("prod")) or matches_any(rel, paths.get("test")):
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            seen = fh.read().split("\n")
+    except OSError:
+        seen = []
+    if rel not in seen:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(rel + "\n")
+
+
+def clear_review(payload, d: str) -> None:
+    path = _pending_path(payload, d)
+    if path and os.path.exists(path):
+        os.remove(path)
+
+
+def stop_reason(cfg, files) -> str:
+    shown = ", ".join(files[:5]) + (" and %d more" % (len(files) - 5) if len(files) > 5 else "")
+    policy = (cfg.get("review") or {}).get("policy", "risk")
+    head = "[routing] Production code changed since the last review: %s. " % shown
+    if not role_enabled(cfg, "reviewer"):
+        return head + ("`roles.reviewer.enabled` is false, so review the diff yourself "
+                       "against the Step 4 triggers and say so in one line, then finish.")
+    if policy == "always":
+        return head + "`review.policy` is `always`: dispatch `route:reviewer` with the diff."
+    return head + ("Apply the Step 4 review policy before you finish: dispatch "
+                   "`route:reviewer` with the diff, or state in one line which trigger "
+                   "you checked and why none fires.")
+
+
+def handle_stop(payload, d: str) -> None:
+    path = _pending_path(payload, d)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            files = [line for line in fh.read().split("\n") if line]
+        # Cleared on every Stop, blocked or not: a list kept past a passing Stop would
+        # block a later turn on writes it did not make.
+        os.remove(path)
+    except (OSError, TypeError):
+        return
+    cfg = load_config(project_dir(payload))
+    review = cfg.get("review") or {}
+    if (not files or payload.get("stop_hook_active") or review.get("policy") == "never"
+            or not review.get("nudge", True)):
+        return
+    print(json.dumps({"decision": "block", "reason": stop_reason(cfg, files)}))
+
+
 def clear_state(payload, d: str) -> None:
     session = payload.get("session_id")
     if not session:
@@ -382,11 +457,21 @@ def main() -> None:
         log_dispatch(payload, d)
         sys.exit(0)
 
+    if event == "Stop":
+        handle_stop(payload, d)
+        sys.exit(0)
+
+    if payload.get("tool_name") in WRITE_TOOLS:
+        note_write(payload, d)
+        sys.exit(0)
+
     # A subagent doing discovery, or spawning nothing, is the system working as designed.
     if normalize_role(payload.get("agent_type")) != "main":
         sys.exit(0)
 
     if payload.get("tool_name") in ("Agent", "Task"):
+        if route_role((payload.get("tool_input") or {}).get("subagent_type")) == "reviewer":
+            clear_review(payload, d)
         handle_dispatch_return(payload)
         sys.exit(0)
 

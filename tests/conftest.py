@@ -12,8 +12,10 @@ sys.path.insert(0, os.path.join(
 BASE_CONFIG = {
     "version": 2,
     "paths": {"prod": ["src/"], "docs": "docs/agent", "specs": "docs/agent/specs"},
-    "models": {"scout": "haiku", "builder": "sonnet",
-               "reviewer": "sonnet", "scribe": "haiku"},
+    "models": {"scout": "haiku", "builder": "opus",
+               "reviewer": "opus", "scribe": "haiku"},
+    # builder is off by default; most guard tests exercise a project that uses one.
+    "roles": {"builder": {"enabled": True}},
 }
 
 

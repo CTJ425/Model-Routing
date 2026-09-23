@@ -18,7 +18,7 @@ wrong cost, and how much subjective judgement is involved.
 
 | Lane | Use when | Path |
 | --- | --- | --- |
-| **0 — inline** | The edit is **surgical** — a typo, a version bump, a one-line fix, a few hunks you can name in one sentence — **and** it lands in one file you have read the relevant region of — scout's map tells you *where* to edit, never *what the text is*, so a map alone is not enough. Trips none of the Step 4 review triggers, and you can name the verification command *before* editing | main session -> verify -> record (Step 6) |
+| **0 — inline** | The edit is **bounded**: at most three files you can name and have read the relevant region of, about 100 changed lines or fewer, and either failing tests already written or a surgical change (a typo, a version bump, a one-line fix) — scout's map tells you *where* to edit, never *what the text is*, so a map alone is not enough. Trips none of the Step 4 review triggers, and you can name the verification command *before* editing | main session -> verify -> record (Step 6) |
 | **1 — bounded** (default) | A clear fix or feature inside known modules | `route:scout` (if the area is unmapped) -> brief -> `route:builder` -> `route:reviewer` (per Step 4 policy) -> `route:scribe` |
 | **2 — elevated risk** | Unknown-cause bug, cross-module change, or any of the Step 4 triggers known up front: persisted state, authorization, a boundary, a silent calculation, control-flow behaviour, or a builder blocker | `route:scout` -> spec + failing tests -> `route:builder` -> `route:reviewer` (always) -> adjudicate -> `route:scribe` |
 
@@ -79,8 +79,12 @@ Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
 
 `roles.<role>.enabled` decides whether a role exists for this project at all. A role set
 to `false` is denied by the guard, so do not dispatch it: skip that step and do its work
-in this session, then say in one line which step you absorbed and why. Every role
-defaults to `true`, and `scout.enabled` is a legacy alias that still works.
+in this session, then say in one line which step you absorbed and why. `builder`
+defaults to `false` and the other roles to `true`; `scout.enabled` is a legacy alias that
+still works. Builder is off by default because replays of real tasks under an Opus 5.5
+main session (`docs/field-reports/2026-09-23-*`) cost 40–50% more with a builder, took
+longer, and measured no gain in accuracy: the main session implements Lane 0 and Lane 1
+work itself unless a project turns builder on.
 
 If `models.<role>` is set for the role you are about to dispatch, pass it explicitly as
 the `model` parameter on the Agent call — this takes precedence over the agent file's own
@@ -293,13 +297,16 @@ prose contract. That is both the larger read and the weaker signal.
 
 If you skip review, say so in one line and name which trigger you checked. A silent
 skip is how this step stopped happening.
+A Stop hook now enforces it: after a production-code write with no later `reviewer`
+dispatch, the first Stop is blocked until you dispatch the reviewer or name the trigger
+you checked. Replays had skipped review on a silent-calculation task in 2 of 3 sessions.
 
 ## Step 5 — adjudicate (main session only)
 
 | Reviewer says | You do |
 | --- | --- |
 | PASS, no findings | go to step 6 |
-| PASS with RISK | record the risk in the project's bug-tracking doc when bookkeeping is enabled; otherwise carry it into the final outcome, then go to step 6 |
+| PASS with RISK | a RISK that touches persistent state, a silent calculation, authorization or a boundary is **fixed now** (the Step 5 FAIL path), or the final outcome names it and says in one line why it stays. Replays showed a reviewer naming "a daily backup never retries" three times and the risk recorded and shipped three times: it was the production defect BUG-036. Any other RISK: record it in the bug-tracking doc when bookkeeping is enabled, otherwise carry it into the final outcome; then go to step 6 |
 | FAIL, 1st time | write a fix instruction naming file + line + required post-condition; resume the builder you already dispatched (in Claude Code, `SendMessage` to that agent) and send only the fix instruction; with builder off, apply the fix instruction in this session |
 | FAIL, 2nd time | **stop dispatching.** The defect is in the spec ~80% of the time. Fix the spec, restart from step 3 |
 | FAIL, 3rd time | stop and ask the user. Do not loop |

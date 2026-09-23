@@ -255,7 +255,7 @@ def dispatch(spawned, project, caller=""):
 
 def with_roles(project, **enabled):
     cfg = json.loads(json.dumps(BASE_CONFIG))
-    cfg["roles"] = {role: {"enabled": state} for role, state in enabled.items()}
+    cfg["roles"].update({role: {"enabled": state} for role, state in enabled.items()})
     write_config(project, cfg)
 
 
@@ -273,9 +273,64 @@ def test_enabled_role_dispatches_silently(role, project):
     assert decision(dispatch("route:" + role, project)) is None
 
 
-def test_every_role_is_enabled_by_default(project):
-    for role in ("scout", "builder", "reviewer", "scribe"):
+def test_builder_is_the_only_role_off_by_default(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    del cfg["roles"]
+    write_config(project, cfg)
+    assert decision(dispatch("route:builder", project)) == "deny"
+    for role in ("scout", "reviewer", "scribe"):
         assert decision(dispatch("route:" + role, project)) is None
+
+
+def dispatch_with_model(spawned, model, project):
+    tool_input = {"subagent_type": spawned}
+    if model is not None:
+        tool_input["model"] = model
+    return run_guard({"tool_name": "Agent", "agent_type": "", "tool_input": tool_input},
+                     project)
+
+
+def with_models(project, **models):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["models"].update(models)
+    write_config(project, cfg)
+
+
+def test_dispatch_on_a_tier_other_than_the_config_is_denied(project):
+    with_models(project, reviewer="sonnet")
+    got = dispatch_with_model("route:reviewer", "opus", project)
+    assert decision(got) == "deny"
+    assert 'model: "sonnet"' in reason(got)
+
+
+def test_dispatch_without_model_is_denied_when_the_default_tier_differs(project):
+    """The agent file says opus; a config pinned to sonnet needs the parameter."""
+    with_models(project, builder="sonnet")
+    got = dispatch_with_model("route:builder", None, project)
+    assert decision(got) == "deny"
+    assert "no `model` parameter" in reason(got)
+
+
+def test_dispatch_without_model_passes_when_the_default_tier_matches(project):
+    assert decision(dispatch_with_model("route:reviewer", None, project)) is None
+
+
+def test_dispatch_with_the_configured_model_passes(project):
+    with_models(project, builder="sonnet")
+    assert decision(dispatch_with_model("route:builder", "sonnet", project)) is None
+
+
+def test_model_check_ignores_a_config_value_that_is_not_an_alias(project):
+    with_models(project, builder="claude-sonnet-5")
+    assert decision(dispatch_with_model("route:builder", "opus", project)) is None
+
+
+def test_model_check_is_off_when_the_harness_forces_one_model(project):
+    with_models(project, builder="sonnet")
+    got = run_guard({"tool_name": "Agent", "agent_type": "",
+                     "tool_input": {"subagent_type": "route:builder", "model": "opus"}},
+                    project, env_extra={"CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1"})
+    assert decision(got) is None
 
 
 def test_disabled_role_is_denied_by_its_bare_name(project):
@@ -812,3 +867,13 @@ def test_main_bash_is_silent_when_write_detection_is_off(project):
 def test_quoted_path_is_not_a_main_bash_target(project):
     """Quote stripping runs before resolution, so a quoted decoy cannot invent a target."""
     assert decision(bash("main", "echo 'src/a.ts' > /tmp/route-guard-out.txt", project)) is None
+
+
+def test_a_disabled_role_is_denied_for_being_off_not_for_its_model(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["roles"]["builder"] = {"enabled": False}
+    cfg["models"]["builder"] = "sonnet"
+    write_config(project, cfg)
+    got = dispatch_with_model("route:builder", "opus", project)
+    assert decision(got) == "deny"
+    assert "roles.builder.enabled" in reason(got)

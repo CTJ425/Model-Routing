@@ -42,6 +42,14 @@ def test_roles_check_reports_a_healthy_roster(project):
     assert "[PASS] roles" in run_doctor(project).stdout
 
 
+def test_roles_check_passes_on_the_default_roster(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    del cfg["roles"]
+    write_config(project, cfg)
+    out = run_doctor(project).stdout
+    assert "[PASS] roles builder off by default" in out
+
+
 def test_roles_check_warns_about_a_role_that_is_off(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
     cfg["roles"] = {"scribe": {"enabled": False}}
@@ -195,6 +203,9 @@ def test_every_check_reports_even_when_one_raises(project):
 def test_effort_warns_when_a_pinned_model_differs_from_the_default(project):
     """A project that pins builder/reviewer to sonnet runs Sonnet at the effort tuned for
     the plugin's default model; the Agent tool cannot change that per project."""
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["models"].update(builder="sonnet", reviewer="sonnet")
+    write_config(project, cfg)
     p = run_doctor(project)
     assert "[WARN] effort builder=sonnet at effort medium" in p.stdout
     assert "reviewer=sonnet at effort medium" in p.stdout
