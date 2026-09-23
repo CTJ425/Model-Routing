@@ -58,10 +58,11 @@ PRICED_FROM = set()
 
 def replay_rate(path: str) -> float:
     """-> USD per replayed token, from the model that did the most turns in `path`."""
-    turns = defaultdict(int)
+    turns, seen = defaultdict(int), set()
     for row in rows(path):
         msg = row.get("message")
-        if isinstance(msg, dict) and msg.get("usage") and row.get("type") == "assistant":
+        if (isinstance(msg, dict) and msg.get("usage") and row.get("type") == "assistant"
+                and new_turn(msg, seen)):
             turns[msg.get("model") or ""] += 1
     for model, _ in sorted(turns.items(), key=lambda kv: -kv[1]):
         price = rate(model)
@@ -100,6 +101,21 @@ def rows(path):
                 continue
 
 
+def new_turn(msg, seen) -> bool:
+    """True for the first row of an assistant message.
+
+    Claude Code writes one API message as one row per content block, all with the same
+    message.id; the rows need not be adjacent. A row without an id is its own turn.
+    """
+    mid = msg.get("id")
+    if not mid:
+        return True
+    if mid in seen:
+        return False
+    seen.add(mid)
+    return True
+
+
 TOOL_USE_ID_RE = re.compile(r"<tool-use-id>([^<]+)</tool-use-id>")
 
 
@@ -130,9 +146,12 @@ def scan_main(path):
     cache_read delta across it is attributable to the dispatch alone.
     delivered: agent id or tool_use_id -> chars of the later rows that delivered for it.
     """
-    disp, turn = {}, 0
+    disp, turn, seen = {}, 0, set()
     delivered = defaultdict(int)
     pending = []  # dispatches awaiting the assistant turn that follows their result
+    # Tool calls of one message can sit on several rows, so `solo` is settled after the scan.
+    calls_in = defaultdict(int)  # message key -> tool_use blocks across its rows
+    msg_of = {}  # tool_use_id -> message key
     for row in rows(path):
         msg = row.get("message")
         if not isinstance(msg, dict):
@@ -145,12 +164,15 @@ def scan_main(path):
 
         if row.get("type") == "assistant" and msg.get("usage"):
             ctx = msg["usage"].get("cache_read_input_tokens", 0)
-            for d in pending:
-                d["ctx_after"] = ctx
-            pending = []
-            turn += 1
+            if new_turn(msg, seen):
+                for d in pending:
+                    d["ctx_after"] = ctx
+                pending = []
+                turn += 1
+            key = msg.get("id") or ("row", turn)
             calls = [b for b in msg.get("content") or []
                      if isinstance(b, dict) and b.get("type") == "tool_use"]
+            calls_in[key] += len(calls)
             agents = [b for b in calls if b.get("name") in ("Agent", "Task")]
             for b in agents:
                 inp = b.get("input") or {}
@@ -161,9 +183,10 @@ def scan_main(path):
                     "turn_index": turn,
                     "ctx_before": ctx,
                     "ctx_after": None,
-                    "solo": len(calls) == 1,
+                    "solo": False,
                     "async": False,
                 }
+                msg_of[b.get("id")] = key
 
         for block in msg.get("content") or []:
             if not isinstance(block, dict) or block.get("type") != "tool_result":
@@ -175,6 +198,8 @@ def scan_main(path):
                 d["async"] = (isinstance(result, dict)
                               and result.get("status") == "async_launched")
                 pending.append(d)
+    for tid, key in msg_of.items():
+        disp[tid]["solo"] = calls_in[key] == 1
     return disp, turn, delivered
 
 
@@ -185,13 +210,13 @@ def scan_subagent(path):
     `SubagentHandback` call (auto mode, Claude Code 2.1.271+), otherwise the text it wrote
     after its last tool result.
     """
-    consumed, turns = 0, 0
+    consumed, turns, seen = 0, 0, set()
     handback, tail = None, 0
     for row in rows(path):
         msg = row.get("message")
         if not isinstance(msg, dict):
             continue
-        if row.get("type") == "assistant" and msg.get("usage"):
+        if row.get("type") == "assistant" and msg.get("usage") and new_turn(msg, seen):
             turns += 1
         for block in msg.get("content") or []:
             if not isinstance(block, dict):

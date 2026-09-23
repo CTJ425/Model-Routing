@@ -124,3 +124,40 @@ def test_text_before_the_last_tool_call_is_not_the_report(tmp_path):
                   [assistant({"type": "text", "text": "N" * 5000})]
                   + reading_then({"type": "text", "text": "R" * 100}))
     assert rec["report"] == 100 / CPT
+
+
+def split(mid, block, cache_read=0):
+    """One row of an API message that Claude Code wrote across several rows."""
+    row = assistant(block, cache_read)
+    row["message"]["id"] = mid
+    return row
+
+
+def test_rows_of_one_message_are_one_turn_and_share_their_tool_calls(tmp_path):
+    main = tmp_path / "s.jsonl"
+    write_jsonl(str(main), [
+        split("m1", {"type": "text", "text": "go"}, 1000),
+        split("m1", {"type": "tool_use", "id": "tu1", "name": "Agent",
+                     "input": {"subagent_type": "route:scout", "prompt": "p"}}, 1000),
+        split("m1", {"type": "tool_use", "id": "tu2", "name": "Agent",
+                     "input": {"subagent_type": "route:scout", "prompt": "q"}}, 1000),
+        tool_result("tu1", "a"), tool_result("tu2", "b"),
+        split("m2", {"type": "thinking", "thinking": ""}, 1300),
+        split("m2", {"type": "text", "text": "ok"}, 1300),
+    ])
+    disp, total, _ = dispatch_delta.scan_main(str(main))
+    assert total == 2
+    assert disp["tu1"]["turn_index"] == disp["tu2"]["turn_index"] == 1
+    assert not disp["tu1"]["solo"] and not disp["tu2"]["solo"]
+
+
+def test_subagent_turns_count_messages_not_rows(tmp_path):
+    sub = tmp_path / "a.jsonl"
+    write_jsonl(str(sub), [
+        split("m1", {"type": "text", "text": "a"}),
+        split("m1", {"type": "tool_use", "id": "r1", "name": "Read", "input": {}}),
+        tool_result("r1", "y" * 40),
+        split("m2", {"type": "text", "text": "done"}),
+    ])
+    consumed, turns, _ = dispatch_delta.scan_subagent(str(sub))
+    assert (consumed, turns) == (40, 2)

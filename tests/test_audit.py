@@ -161,3 +161,36 @@ def test_brief_text_blocks_are_joined_as_separate_lines(tmp_path):
         _assistant(),
     ])
     assert routing_audit.task_identity(p) == ("T2", 0)
+
+
+# --- one API message written as several transcript rows counts once ---
+
+
+def _split(mid, blocks):
+    rows = []
+    for _ in range(blocks):
+        r = _assistant()
+        r["message"]["id"] = mid
+        r["message"]["content"] = [{"type": "text", "text": "x"}]
+        rows.append(r)
+    return rows
+
+
+def test_tally_counts_a_message_split_across_rows_once(tmp_path):
+    p = _write(tmp_path / "s.jsonl", _split("m1", 3) + [_tool_result()] + _split("m2", 2))
+    s = routing_audit.tally(p)["claude-opus-5-5"]
+    assert (s["turns"], s["out"], s["cache_read"], s["cw5"]) == (2, 20, 200, 100)
+
+
+def test_tally_rows_without_a_message_id_each_count(tmp_path):
+    p = _write(tmp_path / "s.jsonl", [_assistant(), _assistant()])
+    assert routing_audit.tally(p)["claude-opus-5-5"]["turns"] == 2
+
+
+def test_tally_takes_the_last_row_of_a_streamed_message(tmp_path):
+    rows = _split("m1", 3)
+    for r, out in zip(rows, (5, 5, 40)):
+        r["message"]["usage"]["output_tokens"] = out
+    p = _write(tmp_path / "s.jsonl", rows)
+    s = routing_audit.tally(p)["claude-opus-5-5"]
+    assert (s["turns"], s["out"]) == (1, 40)

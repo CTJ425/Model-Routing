@@ -104,7 +104,11 @@ def tally(path: str):
     """-> (models -> {out, in, cache_read, cw5, cw1h, turns})"""
     stats = defaultdict(lambda: dict.fromkeys(
         ("out", "in", "cache_read", "cw5", "cw1h", "turns"), 0))
-    for line in open(path, encoding="utf-8", errors="replace"):
+    # One API message is written as one row per content block, all with the same
+    # message.id. The rows are streamed, so only the last row of an id holds the final
+    # usage: keep the last row per id and count it once. A row without an id counts alone.
+    msgs = {}
+    for n, line in enumerate(open(path, encoding="utf-8", errors="replace")):
         try:
             row = json.loads(line)
         except Exception:
@@ -112,6 +116,8 @@ def tally(path: str):
         msg = row.get("message")
         if not isinstance(msg, dict) or not msg.get("usage"):
             continue
+        msgs[msg.get("id") or ("row", n)] = msg
+    for msg in msgs.values():
         u = msg["usage"]
         s = stats[msg.get("model") or "unknown"]
         s["out"] += u.get("output_tokens", 0)
