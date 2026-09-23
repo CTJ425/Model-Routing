@@ -1,6 +1,6 @@
 ---
 description: Report what this project's Claude Code sessions actually cost, split by model and by role — the evidence for whether routing happened.
-argument-hint: "[--all] [--sessions N]"
+argument-hint: "[--all] [--sessions N] [--by-task]"
 ---
 
 Run:
@@ -8,6 +8,8 @@ Run:
 ```
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/routing_audit.py $ARGUMENTS
 ```
+
+`--by-task` adds a "cost by task" table that groups subagent cost by the brief's `Task:` id.
 
 Show the script's output verbatim. Do not recompute, summarise away, or re-format the
 tables — the numbers are the point.

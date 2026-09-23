@@ -152,14 +152,52 @@ def task_identity(path: str):
         first = False
         content = (row.get("message") or {}).get("content")
         if isinstance(content, list):
-            content = "".join(b.get("text", "") for b in content
-                              if isinstance(b, dict) and b.get("type") == "text")
+            content = "\n".join(b.get("text", "") for b in content
+                               if isinstance(b, dict) and b.get("type") == "text")
         head = (content or "").split("\n", 1)[0] if isinstance(content, str) else ""
         if head.startswith("Task:"):
             token = head[len("Task:"):].replace("—", " ").split()
             if token:
                 task = token[0]
     return task, resumes
+
+
+ROUTE_ROLES = ("scout", "builder", "reviewer", "scribe")
+
+
+def by_task(runs) -> dict:
+    """-> {task: {builder_dispatches, builder_resumes, reviewer_dispatches, models, turns,
+    cache_read, out, usd, usd_by_role}} over [(role, agent transcript path)].
+
+    Only route roles count: other agents ("?", general-purpose, ...) carry no task
+    contract, so their rows would misattribute cost.
+    """
+    tasks = {}
+    for role, path in runs:
+        if role not in ROUTE_ROLES:
+            continue
+        task, resumes = task_identity(path)
+        t = tasks.setdefault(task, {
+            "builder_dispatches": 0, "builder_resumes": 0, "reviewer_dispatches": 0,
+            "models": set(), "turns": 0, "cache_read": 0, "out": 0, "usd": 0.0,
+            "usd_by_role": defaultdict(float)})
+        if role == "builder":
+            t["builder_dispatches"] += 1
+            t["builder_resumes"] += resumes
+        elif role == "reviewer":
+            t["reviewer_dispatches"] += 1
+        for model, s in tally(path).items():
+            usd = sum(cost(model, s).values())
+            t["models"].add(model)
+            t["turns"] += s["turns"]
+            t["cache_read"] += s["cache_read"]
+            t["out"] += s["out"]
+            t["usd"] += usd
+            t["usd_by_role"][role] += usd
+    for t in tasks.values():
+        t["models"] = sorted(t["models"])
+        t["usd_by_role"] = dict(t["usd_by_role"])
+    return tasks
 
 
 def dispatch_log() -> dict:
@@ -211,7 +249,7 @@ def subagent_runs(session_path: str, logged: dict):
     return runs, "ok" if runs else "empty"
 
 
-def report(paths) -> int:
+def report(paths, by_task=False) -> int:
     by_model = defaultdict(float)
     by_role = defaultdict(lambda: {"runs": 0, "usd": 0.0, "out": 0})
     by_component = defaultdict(float)
@@ -220,6 +258,7 @@ def report(paths) -> int:
     main_ctx = 0
     row = "{:<18}{:<20}{:>7}{:>11}{:>12}{:>14}{:>10}"
     logged = dispatch_log()
+    all_runs = []
 
     def emit(role, model, s):
         nonlocal main_turns, main_ctx
@@ -249,6 +288,7 @@ def report(paths) -> int:
         by_role["main"]["runs"] += 1
 
         runs, status = subagent_runs(session, logged)
+        all_runs.extend(runs)
         for role, path in runs:
             for model, s in sorted(tally(path).items(), key=lambda kv: -kv[1]["out"]):
                 emit(role, model, s)
@@ -291,13 +331,32 @@ def report(paths) -> int:
         print("Main ran {:,} turns at an average context of {:,} tokens — ${:.3f} per "
               "turn.".format(main_turns, main_ctx // main_turns, main_usd / main_turns))
     print("\nUSD columns use pricing.json; verify it against the official pricing page.")
+    if by_task:
+        print_by_task(all_runs, main_usd)
     return 0
+
+
+def print_by_task(runs, main_usd: float) -> None:
+    trow = "{:<18}{:>6}{:>6}{:>6}{:>7}{:>13}{:>10}{:>10}  {}  {}"
+    print("\n--- cost by task (subagents only) ---")
+    print(trow.format("task", "bDisp", "bRes", "rDisp", "turns", "cacheR", "out", "USD",
+                      "models", "USD by role"))
+    for task, t in sorted(by_task(runs).items(), key=lambda kv: -kv[1]["usd"]):
+        print(trow.format(task, t["builder_dispatches"], t["builder_resumes"],
+                          t["reviewer_dispatches"], t["turns"],
+                          "{:,}".format(t["cache_read"]), "{:,}".format(t["out"]),
+                          "{:,.2f}".format(t["usd"]), ",".join(t["models"]) or "—",
+                          ",".join("{}={:.2f}".format(r, u) for r, u in
+                                   sorted(t["usd_by_role"].items()))))
+    print("Main session ${:,.2f} is not split across tasks.".format(main_usd))
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--all", action="store_true", help="every session for this project")
     ap.add_argument("--sessions", type=int, default=1, help="how many recent sessions")
+    ap.add_argument("--by-task", action="store_true",
+                    help="also group subagent cost by the brief's Task id")
     args = ap.parse_args()
 
     d = os.path.join(os.path.expanduser("~"), ".claude", "projects",
@@ -306,7 +365,7 @@ def main() -> int:
     if not paths:
         print("No transcripts under %s" % d, file=sys.stderr)
         return 1
-    return report(paths if args.all else paths[: args.sessions])
+    return report(paths if args.all else paths[: args.sessions], by_task=args.by_task)
 
 
 if __name__ == "__main__":

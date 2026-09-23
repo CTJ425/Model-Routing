@@ -93,3 +93,71 @@ def test_a_task_line_that_is_not_first_is_untagged(tmp_path):
     ])
     assert routing_audit.task_identity(p) == ("(untagged)", 2)
 
+
+# --- T3: cost grouped by task ---
+
+
+def _stats_usd(path, model):
+    return sum(routing_audit.cost(model, routing_audit.tally(path)[model]).values())
+
+
+def _task_runs(tmp_path):
+    b1 = _write(tmp_path / "agent-b1.jsonl", [
+        _user("Task: T3a — first task"), _assistant(), _resume(), _assistant()])
+    r1 = _write(tmp_path / "agent-r1.jsonl", [_user("Task: T3a — review"), _assistant()])
+    b2 = _write(tmp_path / "agent-b2.jsonl", [
+        _user("Task: T3b — second task"), _assistant(model="claude-sonnet-5")])
+    s1 = _write(tmp_path / "agent-s1.jsonl", [
+        _user("Question: where is X?"), _assistant(model="claude-haiku-4-5-20251001")])
+    other = _write(tmp_path / "agent-o1.jsonl", [_user("Task: T3a — not a route role"),
+                                                  _assistant()])
+    return [("builder", b1), ("reviewer", r1), ("builder", b2), ("scout", s1),
+            ("?", other), ("general-purpose", other)], b1, r1
+
+
+def test_by_task_groups_runs_and_counts_the_resume_on_the_right_task(tmp_path):
+    runs, b1, r1 = _task_runs(tmp_path)
+    t = routing_audit.by_task(runs)
+    assert set(t) == {"T3a", "T3b", "(untagged)"}
+    a = t["T3a"]
+    assert (a["builder_dispatches"], a["builder_resumes"], a["reviewer_dispatches"]) == (1, 1, 1)
+    assert (a["turns"], a["out"], a["cache_read"]) == (3, 30, 300)
+    assert a["models"] == ["claude-opus-5-5"]
+    b = t["T3b"]
+    assert (b["builder_dispatches"], b["builder_resumes"], b["reviewer_dispatches"]) == (1, 0, 0)
+    assert b["models"] == ["claude-sonnet-5"]
+    assert t["(untagged)"]["turns"] == 1
+
+
+def test_by_task_splits_cost_by_role_and_drops_non_route_roles(tmp_path):
+    runs, b1, r1 = _task_runs(tmp_path)
+    a = routing_audit.by_task(runs)["T3a"]
+    assert set(a["usd_by_role"]) == {"builder", "reviewer"}
+    assert abs(a["usd_by_role"]["builder"] - _stats_usd(b1, "claude-opus-5-5")) < 1e-12
+    assert abs(a["usd_by_role"]["reviewer"] - _stats_usd(r1, "claude-opus-5-5")) < 1e-12
+    assert abs(a["usd"] - sum(a["usd_by_role"].values())) < 1e-12
+
+
+def test_report_by_task_prints_each_task_once(tmp_path, capsys):
+    session = _write(tmp_path / "sess.jsonl", [_assistant(out=500)])
+    sub = tmp_path / "sess" / "subagents"
+    sub.mkdir(parents=True)
+    for name, role, rows in (
+            ("agent-x1", "route:builder", [_user("Task: T3a — x"), _assistant(), _resume(),
+                                           _assistant()]),
+            ("agent-x2", "route:reviewer", [_user("Task: T3a — x"), _assistant()])):
+        _write(sub / (name + ".jsonl"), rows)
+        (sub / (name + ".meta.json")).write_text(json.dumps({"agentType": role}))
+    assert routing_audit.report([session], by_task=True) == 0
+    out = capsys.readouterr().out
+    assert "--- cost by task" in out
+    rows = [ln.split() for ln in out.splitlines() if ln.split()[:1] == ["T3a"]]
+    assert len(rows) == 1
+
+
+def test_brief_text_blocks_are_joined_as_separate_lines(tmp_path):
+    p = _write(tmp_path / "agent-e.jsonl", [
+        _user([{"type": "text", "text": "Task: T2"}, {"type": "text", "text": "Contract: x"}]),
+        _assistant(),
+    ])
+    assert routing_audit.task_identity(p) == ("T2", 0)
