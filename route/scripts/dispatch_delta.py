@@ -40,7 +40,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "hooks"))
 sys.path.insert(0, _HERE)
 from _config import load_config, project_dir  # noqa: E402
-from routing_audit import CACHE_READ, rate  # noqa: E402
+from routing_audit import cache_read_mult, rate  # noqa: E402
 
 PROJECT = project_dir()
 CFG = load_config(PROJECT)
@@ -67,7 +67,7 @@ def replay_rate(path: str) -> float:
         price = rate(model)
         if price:
             PRICED_FROM.add(model)
-            return price[0] * CACHE_READ / 1e6
+            return price[0] * cache_read_mult(model) / 1e6
     return FALLBACK_USD_PER_TOKEN_REPLAY
 
 

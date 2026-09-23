@@ -190,3 +190,18 @@ def test_every_check_reports_even_when_one_raises(project):
     write_config(project, {"version": 2, "paths": {"prod": "not-a-list"}})
     p = run_doctor(project)
     assert p.stdout.strip().splitlines()[-1].endswith("passed"), p.stdout + p.stderr
+
+
+def test_effort_warns_when_a_pinned_model_differs_from_the_default(project):
+    """A project that pins builder/reviewer to sonnet runs Sonnet at the effort tuned for
+    the plugin's default model; the Agent tool cannot change that per project."""
+    p = run_doctor(project)
+    assert "[WARN] effort builder=sonnet at effort medium" in p.stdout
+    assert "reviewer=sonnet at effort medium" in p.stdout
+
+
+def test_effort_passes_on_the_default_models(project):
+    write_config(project, dict(BASE_CONFIG, models={
+        "scout": "haiku", "builder": "opus", "reviewer": "opus", "scribe": "haiku"}))
+    p = run_doctor(project)
+    assert "[PASS] effort" in p.stdout

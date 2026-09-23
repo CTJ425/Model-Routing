@@ -52,8 +52,8 @@ DEFAULTS = {
         "specs": "docs/agent/specs",
     },
     "models": {
-        "scout": "haiku", "builder": "sonnet",
-        "reviewer": "sonnet", "scribe": "haiku",
+        "scout": "haiku", "builder": "opus",
+        "reviewer": "opus", "scribe": "haiku",
     },
     "bookkeeping": {
         "enabled": True,

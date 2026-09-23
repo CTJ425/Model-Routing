@@ -6,7 +6,7 @@
     "docs": "docs",
     "specs": "docs/agent/specs"
   },
-  "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
+  "models": { "scout": "haiku", "builder": "opus", "reviewer": "opus", "scribe": "haiku" },
   "bookkeeping": {
     "enabled": true,
     "timezone": "Asia/Taipei",

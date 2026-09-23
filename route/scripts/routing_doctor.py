@@ -217,6 +217,38 @@ def check_models(cfg: dict) -> None:
           "may not be in force." % (override, shown, tiers))
 
 
+def frontmatter_value(role: str, key: str):
+    """-> `key` from the plugin's agents/<role>.md frontmatter, or None."""
+    try:
+        with open(os.path.join(PLUGIN_ROOT, "agents", role + ".md"),
+                  encoding="utf-8") as fh:
+            head = fh.read().split("---", 2)[1]
+    except (OSError, IndexError):
+        return None
+    m = re.search(r"^%s:\s*(\S+)\s*$" % re.escape(key), head, re.M)
+    return m.group(1) if m else None
+
+
+def check_effort(cfg: dict) -> None:
+    """Effort lives only in the agent frontmatter, so it follows the plugin default even
+    when `models.<role>` pins a different model than that default."""
+    models = cfg.get("models") or {}
+    moved = []
+    for role in ("builder", "reviewer"):
+        pinned = models.get(role)
+        default = frontmatter_value(role, "model")
+        if pinned and default and pinned != default:
+            moved.append("%s=%s at effort %s" % (
+                role, pinned, frontmatter_value(role, "effort") or "unset"))
+    if not moved:
+        check("PASS", "effort", "builder and reviewer run their default model.")
+        return
+    check("WARN", "effort",
+          "%s. Effort comes from the plugin's agent frontmatter, which is tuned for its "
+          "default model; the Agent tool cannot set effort per project."
+          % "; ".join(moved))
+
+
 # bool before int: True is an int too.
 JSON_KINDS = ((bool, "a boolean"), (int, "a number"), (float, "a number"),
               (str, "a string"), (list, "an array"), (dict, "an object"))
@@ -365,6 +397,7 @@ def main() -> int:
     run_check("paths.prod", check_paths_prod, cfg)
     run_check("paths.docs", check_paths_docs, cfg)
     run_check("models", check_models, cfg)
+    run_check("effort", check_effort, cfg)
     run_check("roles", check_roles, cfg)
     run_check("dispatch log", check_dispatch_log)
     run_check("transcripts", check_transcripts)

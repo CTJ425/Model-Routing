@@ -69,7 +69,7 @@ Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
 {
   "version": 2,
   "paths": { "prod": ["src/"] },
-  "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
+  "models": { "scout": "haiku", "builder": "opus", "reviewer": "opus", "scribe": "haiku" },
   "roles": { "scout": { "enabled": true }, "builder": { "enabled": true },
              "reviewer": { "enabled": true }, "scribe": { "enabled": true } },
   "review": { "policy": "risk" },
@@ -191,7 +191,7 @@ the rework lands two rounds later. Four checks, each cheap, each having caught a
   that is right in the happy path. Write what it must *not* do, and why — that sentence is
   what stops a later change from reintroducing the defect the spec exists to prevent.
 
-## Step 3 — build (sonnet by default)
+## Step 3 — build (opus by default)
 
 When `roles.builder.enabled` is `false` the guard denies the dispatch and this session
 writes the code itself, still against the Step 2 input and the same Verify command. The
@@ -216,7 +216,7 @@ Independent tasks may go out as parallel `route:builder` calls only when their `
 are disjoint and they do not share generated state. Otherwise dispatch them sequentially;
 parallel builders share a worktree and can overwrite one another.
 
-## Step 4 — review (sonnet by default)
+## Step 4 — review (opus by default)
 
 Skip this step entirely when `roles.reviewer.enabled` is `false` — the guard denies the
 dispatch, so review it yourself here and say so in one line.

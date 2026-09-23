@@ -63,15 +63,27 @@ CACHE_W_5M = MULT.get("write5m", 1.25)
 CACHE_W_1H = MULT.get("write1h", 2.0)
 
 
-def rate(model: str):
-    """-> (input, output) USD per million tokens, or None when unpriced."""
+def price_entry(model: str):
+    """-> (pricing key, entry) for the longest prefix of `model`, or None when unpriced."""
     best = None
     for prefix, price in (PRICING.get("models") or {}).items():
         if (model or "").startswith(prefix) and (best is None or len(prefix) > len(best[0])):
             best = (prefix, price)
+    return best
+
+
+def rate(model: str):
+    """-> (input, output) USD per million tokens, or None when unpriced."""
+    best = price_entry(model)
     if best is None:
         return None
     return best[1].get("in", 0.0), best[1].get("out", 0.0)
+
+
+def cache_read_mult(model: str) -> float:
+    """Cache hits are not 0.1x on every model (Opus 5.5 bills them at 0.05x)."""
+    best = price_entry(model)
+    return best[1].get("cacheRead", CACHE_READ) if best else CACHE_READ
 
 
 def cost(model: str, s) -> dict:
@@ -82,7 +94,7 @@ def cost(model: str, s) -> dict:
     inp, outp = price
     return {
         "out": s["out"] * outp / 1e6,
-        "cache_read": s["cache_read"] * inp * CACHE_READ / 1e6,
+        "cache_read": s["cache_read"] * inp * cache_read_mult(model) / 1e6,
         "cache_write": (s["cw5"] * CACHE_W_5M + s["cw1h"] * CACHE_W_1H) * inp / 1e6,
         "in": s["in"] * inp / 1e6,
     }
@@ -228,7 +240,9 @@ def report(paths) -> int:
 
     print("\n--- cost by model ---")
     for model, usd in sorted(by_model.items(), key=lambda kv: -kv[1]):
-        print("  {:<28}{:>10,.2f}  {:6.1%}".format(model, usd, usd / grand))
+        # A fallback key (e.g. `claude-opus-` for a new Opus) must be visible, not silent.
+        print("  {:<28}{:>10,.2f}  {:6.1%}  (priced as {})".format(
+            model, usd, usd / grand, price_entry(model)[0]))
     if unpriced:
         print("  (unpriced, excluded: %s — add a prefix to pricing.json)"
               % ", ".join(sorted(unpriced)))

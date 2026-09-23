@@ -8,11 +8,22 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
 
 ### Changed
 
-- `builder` now runs at `effort: xhigh` (was `high`). The agent frontmatter is the only
-  place a role's effort is set: the Agent tool has no `effort` parameter, so
-  `/route:config` cannot change it per project. `reviewer` stays at `high`. `scout` and
-  `scribe` keep `low`, which Claude Code drops on Haiku 4.5 because that model has no
-  effort support; it applies only when `models.<role>` names a model that does.
+- `builder` and `reviewer` now default to `model: opus`, `effort: medium` (were
+  `sonnet` at `high`). On Claude Code 2.1.280 the `opus` alias resolves to
+  `claude-opus-5-5`, whose cache reads cost the same per token as Sonnet 5's; cache reads
+  are about two thirds of a builder run's cost, so the stronger model costs less extra
+  than its list price suggests. `/route:init` writes `opus` for both roles. Existing
+  projects keep their pinned `models.<role>`, and a project that pins `sonnet` now runs
+  Sonnet at `medium`: the agent frontmatter is the only place a role's effort is set,
+  because the Agent tool has no `effort` parameter. `/route:doctor` warns about this
+  case with a new `effort` check. `scout` and `scribe` keep `low`, which Claude Code drops
+  on Haiku 4.5 because that model has no effort support.
+- `pricing.json` prices `claude-opus-5-5` at $4/$20 with 0.05x cache reads, and
+  `claude-sonnet-5` at $2/$10 (its introductory price became the standard price). An
+  entry can now carry its own `cacheRead` multiplier. Before this, the audit priced Opus
+  5.5 cache reads at 2.5x and Sonnet 5 at 1.5x their list price. `/route:audit` names the
+  pricing key behind each model's cost, so a model priced by a family fallback is
+  visible.
 
 ### Fixed
 

@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "route",
-      "description": "Main thread plans and adjudicates; scout (haiku) maps and compresses; builder (sonnet) implements; reviewer (sonnet) checks risk work; scribe (haiku) records. Role boundaries enforced by PreToolUse hooks, not prompt etiquette.",
+      "description": "Main thread plans and adjudicates; scout (haiku) maps and compresses; builder (opus) implements; reviewer (opus) checks risk work; scribe (haiku) records. Role boundaries enforced by PreToolUse hooks, not prompt etiquette.",
       "source": "./route",
       "category": "ai",
       "keywords": [

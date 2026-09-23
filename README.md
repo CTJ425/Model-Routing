@@ -6,8 +6,8 @@
 |---|---|---|---|---|
 | **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 路由分級、順序排定、規格/簡報撰寫、結果裁決 | 撰寫生產程式碼、直接編輯追蹤記錄 |
 | **scout** | 子代理人 (Subagent) | `haiku` (low effort, 80 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
-| **builder** | 子代理人 (Subagent) | `sonnet` (xhigh effort, 240 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
-| **reviewer** | 子代理人 (Subagent) | `sonnet` (high effort, 80 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
+| **builder** | 子代理人 (Subagent) | `opus` (medium effort, 240 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
+| **reviewer** | 子代理人 (Subagent) | `opus` (medium effort, 80 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
 | **scribe** | 子代理人 (Subagent) | `haiku` (low effort, 90 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
 
 角色權限邊界透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
@@ -112,10 +112,10 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 3. **Step 2 — 規格與簡報撰寫 (`Boss` | Session 模型)**：
    - 高階模型撰寫任務契約、完整 `Files` 異動檔案清單、精確的 `Verify` 驗證指令與 `Non-goals`（非目標）。Boss 絕對不直接編寫生產代碼。
 
-4. **Step 3 — 程式碼實作 (`builder` | Sonnet 預設，XHigh Effort)**：
+4. **Step 3 — 程式碼實作 (`builder` | Opus 預設，Medium Effort)**：
    - 讀取 Spec/Brief，嚴格在指定的 `Files` 清單內實作變更，並照字面（Verbatim）原樣執行驗證指令與測試套件。
 
-5. **Step 4 — 審查與風險檢查 (`reviewer` | Sonnet 預設，High Effort)**：
+5. **Step 4 — 審查與風險檢查 (`reviewer` | Opus 預設，Medium Effort)**：
    - 依據 `review.policy`（`always`、`risk` 或 `never`）觸發。Boss 以外部 Diff 形式提供變更內容，讓審查者直接閱讀 Diff 差異而非重新讀取全量檔案。
    - 評估 7 大風險觸發器（`no_red_green`、`persistent_state`、`authorization`、`boundary`、`silent_calculation`、`control_flow`、`builder_blocker`）以及 5 項常態檢查（Standing Checks）。只回報問題清單（`BLOCKER` / `RISK`），不提出具體修復方案。
 
@@ -147,8 +147,8 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
   },
   "models": {
     "scout": "haiku",
-    "builder": "sonnet",
-    "reviewer": "sonnet",
+    "builder": "opus",
+    "reviewer": "opus",
     "scribe": "haiku"
   },
   "roles": {
@@ -177,7 +177,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 
 - `paths.prod`：生產代碼的相對路徑或 Glob 規則，Guard 會據此界定生產代碼範圍。
 - `paths.test`：測試檔案路徑規則，Guard 會嚴禁 `builder` 擅自修改此範圍。
-- `models.<role>`：針對此專案覆寫該角色的分派模型，由 Boss 以 Agent 工具的 `model` 參數帶入（此參數只接受模型別名，例如 `haiku`、`sonnet`、`opus`）。此設定僅作用於分派參數，不會修改插件本體檔案。Claude Code 2.1.251 起，此參數優先於 Agent frontmatter 與環境變數 `CLAUDE_CODE_SUBAGENT_MODEL`（後者只是沒有其他來源時的預設值）；只有再設定 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`（2.1.257 起）時，所有子代理人才會被強制改用 `CLAUDE_CODE_SUBAGENT_MODEL`（未設定則用主會話模型），此處設定隨之失效。2.1.251 以前的版本，`CLAUDE_CODE_SUBAGENT_MODEL` 本身就會蓋過此處設定。
+- `models.<role>`：針對此專案覆寫該角色的分派模型，由 Boss 以 Agent 工具的 `model` 參數帶入（此參數只接受模型別名，例如 `haiku`、`sonnet`、`opus`）。此設定僅作用於分派參數，不會修改插件本體檔案。Effort 只寫在 Agent frontmatter，無法依專案調整：`builder` 與 `reviewer` 預設 `medium`，所以把它們改回 `sonnet` 的專案，會以 medium（而非舊版的 xhigh／high）執行 Sonnet。別名由 Claude Code 解析，例如 2.1.280 的 `opus` 對應 `claude-opus-5-5`；以子代理人 transcript 內的 `message.model` 為準。Claude Code 2.1.251 起，此參數優先於 Agent frontmatter 與環境變數 `CLAUDE_CODE_SUBAGENT_MODEL`（後者只是沒有其他來源時的預設值）；只有再設定 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`（2.1.257 起）時，所有子代理人才會被強制改用 `CLAUDE_CODE_SUBAGENT_MODEL`（未設定則用主會話模型），此處設定隨之失效。2.1.251 以前的版本，`CLAUDE_CODE_SUBAGENT_MODEL` 本身就會蓋過此處設定。
 - `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（四個角色均可獨立關閉）。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。關閉 `builder` 時，主會話修改生產代碼不再詢問；關閉 `scribe` 時，主會話修改追蹤文檔不再詢問（時間戳檢查仍然生效）。
 - `bookkeeping.enabled`：設為 `false` 時僅啟用模型路由功能（不分派 `scribe`、不維護追蹤文檔、Guard 不套用記錄保護規則）。
 - `bookkeeping.timezone`：寫入記錄時間戳時所採用的 IANA 時區（如 `UTC` 或 `Asia/Taipei`）。
