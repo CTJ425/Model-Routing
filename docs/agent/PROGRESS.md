@@ -5,6 +5,18 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
+## 📅 Log: 2026-09-23 17:21:10 CST (0.9.4 — builder back on; Lane 0 sized by the main context)
+
+- **Changed**: route/hooks/_config.py, route/hooks/routing_guard.py, route/hooks/routing_observe.py, route/scripts/routing_doctor.py, route/schema/route.config.schema.json, route/skills/route/SKILL.md, route/commands/config.md, README.md, docs/CHANGELOG.md, tests/conftest.py, tests/test_guard.py, tests/test_observe.py, tests/test_doctor.py, .claude/route.config.json
+- **Why**: a user-supplied /cost from a longer session (~80k main context, Sonnet builder, $2.82 for +305/−58 lines) suggested that turning builder off everywhere was too blunt: the fresh-session replays never measured a long main context.
+- **Result**: `roles.builder.enabled` defaults to true again. New `guard.builderAtK` (default 60, thousands of tokens; env `ROUTING_BUILDER_AT_K`): below it the main session writes production code with no ask; at or above it `mainSeverity` applies and the reason names the context size. Context comes from the transcript's last real usage row (sidechain, synthetic and zero rows skipped); unknown context keeps the ask; `deny` always applies. The brief names the threshold.
+- **Basis**: measured builder-only premium $0.19–0.38 per task in fresh ~26k sessions; estimated break-even 56k–89k of main context. Not yet measured in a long session.
+- **Verify**: PASS — `uvx --python python3 pytest -q` — 346 passed, 0 failed (was 335).
+- **Review**: reviewer FAIL twice — an unsupported "80k" claim, a premium that included reviewer/scout/scribe, `deny` overridden below the threshold, parser edge cases, untested brief branches — all fixed. No third review: the second pass confirmed the code fixes; the rest was wording and numbers, recomputed from the field reports.
+- **Commits**: 05f886c
+
+---
+
 ## 📅 Log: 2026-09-23 17:01:05 CST (0.9.4 — builder off by default, model tiers enforced, review gate at Stop)
 
 - **Changed**: route/hooks/_config.py, route/hooks/routing_guard.py, route/hooks/routing_observe.py, route/hooks/hooks.json, route/scripts/routing_doctor.py, route/schema/route.config.schema.json, route/skills/route/SKILL.md, route/commands/config.md, README.md, docs/CHANGELOG.md, tests/conftest.py, tests/test_guard.py, tests/test_observe.py, tests/test_doctor.py, .claude/route.config.json
