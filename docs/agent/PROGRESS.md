@@ -5,6 +5,17 @@ Newest entry at the top, immediately after this header block. Older entries roll
 
 ---
 
+## 📅 Log: 2026-09-23 10:43:36 CST (0.9.4 — Opus 5.5 verification; T2–T4 task identity and --by-task)
+
+- **Changed**: route/skills/route/SKILL.md, route/scripts/routing_audit.py, route/commands/audit.md, tests/test_audit.py, docs/20260923.md, docs/20260923-verification.md
+- **Why**: verify builder and reviewer on Opus 5.5 / medium (docs/20260923-verification.md), then make cost per task measurable (spec T2–T4).
+- **Result**: V1–V6 PASS: builder and reviewer transcripts show `claude-opus-5-5` at `effort=medium`. T4: SKILL.md Steps 3–4 require a leading `Task: <id>` line and the same id at the start of the Agent description. T2: `task_identity()` reads the id and counts resumes as user entries with `origin.kind == "coordinator"` (confirmed on a real resume; the spec's earlier rule over-counted harness nudges). T3: `routing_audit.py --by-task` groups subagent cost per task; default output byte-identical.
+- **Verify**: PASS — `uvx --python python3 pytest -q` — 309 passed, 0 failed (was 301). pytest is no longer installed for the system python3 (3.14.7); CI still installs it.
+- **Review**: T4 PASS (3 RISK), T2 PASS (3 RISK), T3 PASS (4 RISK). Open risks in BUG_FIX.md.
+- **Commits**: 79e5d79, e8b3d05, 71045cb, 9d20ad8
+
+---
+
 ## 📅 Log: 2026-09-22 20:16:37 CST (0.9.4 — Claude Code 2.1.278 check: delta return cost, SKILL `$0`)
 
 - **Changed**: route/scripts/dispatch_delta.py, route/skills/route/SKILL.md,
