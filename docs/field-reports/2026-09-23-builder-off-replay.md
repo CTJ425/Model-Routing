@@ -53,8 +53,9 @@ fresh sessions, and the missing quality check all favour D (see Limits).
   of cache read per turn, against about 26k in these runs, measured over 136 main turns), so every turn the main
   session spends implementing costs several times more there.
 - **Quality beyond the tests was not measured.** The reviewer's value is what tests do not
-  catch. In this session reviewers found real defects the tests missed (T2: text blocks
-  joined without a newline; B1: first-row usage instead of last-row). Arm D had no review.
+  catch. In this session a reviewer found a real defect the tests missed (T2: text blocks
+  joined without a newline), and the main session found another by checking real data
+  (B1: first-row usage instead of last-row). Arm D had no review.
 - **One run per task and arm.** Seven pairs, no repeats.
 - Only 7 tasks (the spec asked for 8). R8 was dropped for budget.
 
