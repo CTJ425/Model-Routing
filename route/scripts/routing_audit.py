@@ -130,6 +130,38 @@ def tally(path: str):
     return stats
 
 
+def task_identity(path: str):
+    """-> (task, resumes) read from an agent transcript.
+
+    task is the id on the brief's leading `Task:` line, else "(untagged)". resumes counts
+    only coordinator messages: the harness also injects isMeta user entries (handback
+    reminder, no-visible-output nudge) that are not resumes.
+    """
+    task, resumes, first = "(untagged)", 0, True
+    for line in open(path, encoding="utf-8", errors="replace"):
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if row.get("type") != "user":
+            continue
+        if (row.get("origin") or {}).get("kind") == "coordinator":
+            resumes += 1
+        if not first:
+            continue
+        first = False
+        content = (row.get("message") or {}).get("content")
+        if isinstance(content, list):
+            content = "".join(b.get("text", "") for b in content
+                              if isinstance(b, dict) and b.get("type") == "text")
+        head = (content or "").split("\n", 1)[0] if isinstance(content, str) else ""
+        if head.startswith("Task:"):
+            token = head[len("Task:"):].replace("—", " ").split()
+            if token:
+                task = token[0]
+    return task, resumes
+
+
 def dispatch_log() -> dict:
     """-> {main transcript path: [(role, agent transcript path)]} from the hook's log.
 
