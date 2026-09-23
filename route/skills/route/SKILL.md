@@ -202,6 +202,9 @@ Otherwise dispatch `route:builder` with **only** its Step 2 input: the Lane 1 br
 path plus test path. Never paste a spec file's contents — builder reads the file. Do not
 add advice or context; anything extra you say competes with the spec.
 
+The brief's first line is `Task: <id>` — use `?-<short slug>` when there is no tracked id —
+and the Agent `description` begins with the same id, so every dispatch can be traced to its task.
+
 Builder's Bash write scope is the same as its `Write`/`Edit` scope: `paths.prod`, or
 anything outside the repository. `mkdir`, `mv` and `rm` inside the production paths are
 allowed, because no file tool expresses them; a write-shaped command the guard cannot
@@ -274,6 +277,9 @@ Pass reviewer the brief **or** the spec path, plus builder's reported file list 
 command and result rather than re-running anything. The Boss must run the final Verify
 command again after any review fix before recording. Reviewer returns `PASS`/`FAIL` and
 findings, never fixes.
+
+The reviewer dispatch for a builder round opens with the same `Task: <id>` first line as
+that round's builder brief, and its Agent `description` begins with the same id.
 
 The Boss also writes the change itself to a file **outside the repository** (a temp path — an
 untracked diff inside the repo gets committed by accident) and passes reviewer that path.
