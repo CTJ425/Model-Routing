@@ -12,7 +12,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Whether this role may be dispatched. Default true, except builder, which defaults to false."
+          "description": "Whether this role may be dispatched. Default true."
         }
       }
     }
@@ -129,8 +129,13 @@
       "properties": {
         "mainSeverity": {
           "type": "string",
-          "description": "What happens when the main session writes production code or a record. Does not apply to production code when roles.builder.enabled is false, or to records when roles.scribe.enabled is false.",
+          "description": "What happens when the main session writes production code or a record. Does not apply to production code when roles.builder.enabled is false, or while the main context is under guard.builderAtK (except with deny, which always applies); does not apply to records when roles.scribe.enabled is false.",
           "enum": ["ask", "deny", "off"]
+        },
+        "builderAtK": {
+          "type": "integer",
+          "description": "Main-session context size, in thousands of tokens, below which the main session writes production code with no ask (Lane 0). At or above it, mainSeverity applies, because each implementation turn replays that context. Default 60, an estimate: fresh-session replays put the builder-only premium at $0.19–0.38 per task, which breaks even at about 56k–89k. 0 always applies mainSeverity. Ignored when mainSeverity is deny.",
+          "minimum": 0
         },
         "readKB": {
           "type": "integer",

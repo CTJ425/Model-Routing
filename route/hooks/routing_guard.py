@@ -36,6 +36,8 @@ Env overrides:
   ROUTING_GUARD=off           disable entirely
   ROUTING_MAIN=deny|ask|off   main-session severity
   ROUTING_READ_KB=<n>         main-session large-read threshold in KB (0 disables)
+  ROUTING_BUILDER_AT_K=<n>    main-session context (k tokens) from which production
+                              writes ask (0 = always ask)
 """
 import datetime
 import json
@@ -336,12 +338,98 @@ REASONS = {
 CLASS_OWNER = {"prod": "builder", "record": "scribe"}
 
 
+# Set by main() from the payload: the main session's transcript, read for its context size.
+TRANSCRIPT = None
+TAIL_BYTES = 512 * 1024
+
+
+_CTX = {}
+
+
+def main_context_tokens(path):
+    """-> the context the main session's last API call carried (input + cache read +
+    cache write), from the transcript's last real usage row, or None when unknown.
+    Read once per hook call, so the decision and its reason see the same number."""
+    if path in _CTX:
+        return _CTX[path]
+    _CTX[path] = _read_context(path)
+    return _CTX[path]
+
+
+def _read_context(path):
+    if not path:
+        return None
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, fh.tell() - TAIL_BYTES))
+            lines = fh.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        try:
+            row = json.loads(line)
+            msg = row.get("message") or {}
+            usage = msg.get("usage")
+            if row.get("isSidechain") or msg.get("model") == "<synthetic>":
+                continue  # a subagent's row, or a harness message with no real call
+            total = sum(int(usage.get(k) or 0) for k in (
+                "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+        except Exception:
+            continue
+        if total > 0:
+            return total
+    return None
+
+
+def builder_at(cfg) -> int:
+    """-> guard.builderAtK in tokens. The default of 60k is an estimate, not a measurement.
+
+    Measured (docs/field-reports/2026-09-23-*), fresh sessions of about 26k context: the
+    builder alone (full-roster cost minus its reviewer, scout and scribe runs, against
+    all roles off) added $0.19 per task on the route repo and $0.38 on stock-pnl-web
+    ($0.24-0.69 per task). Tests passed either way; on one stock-pnl-web task the
+    all-off arm kept two defects the other arms fixed.
+    Estimated: implementing in a session of context C adds about 30 turns x (C - 26k) x
+    $0.20/M (Opus 5.5 cache reads) over a fresh session, i.e. $0.06 per 10k. At the
+    $0.38 premium that breaks even at C = 89k when the session ends after the task, and
+    at 56k when ~50k tokens of reading stay for ~20 more turns (+$0.20). 60k is the
+    default; no builder-vs-main replay has run in a long session yet."""
+    raw = os.environ.get("ROUTING_BUILDER_AT_K")
+    if raw is None:
+        raw = cfg["guard"].get("builderAtK", 60)
+    try:
+        return max(0, int(raw)) * 1000
+    except (TypeError, ValueError):
+        return 60000
+
+
 def _main_write_absorbed(cls, cfg) -> bool:
-    """-> whether a main-session write of this class is the owning role's job, and that
-    role is turned off, so the main session does it with no ask. `deny` included: with
-    the role off there is no cheaper path left to name."""
+    """-> whether the main session makes this write with no ask. A class whose owning
+    role is off is always absorbed (`deny` included: no cheaper path is left to name).
+    Production code is also absorbed while the main session's context is under
+    guard.builderAtK: there, implementing here costs less than a builder dispatch."""
     owner = CLASS_OWNER.get(cls)
-    return bool(owner) and not role_enabled(cfg, owner)
+    if not owner:
+        return False
+    if not role_enabled(cfg, owner):
+        return True
+    if cls == "prod" and main_severity(cfg) != "deny":
+        # `deny` means the main session never writes production code: honoured as is.
+        at = builder_at(cfg)
+        ctx = main_context_tokens(TRANSCRIPT)
+        return bool(at) and ctx is not None and ctx < at
+    return False
+
+
+def main_reason(cls, cfg) -> str:
+    reason = REASONS[("main", cls)]
+    ctx = main_context_tokens(TRANSCRIPT) if cls == "prod" else None
+    if ctx is not None and builder_at(cfg):
+        reason += (" This session's context is about %dk tokens, at or over the %dk "
+                   "(`guard.builderAtK`) where each implementation turn here replays "
+                   "more than a builder dispatch costs." % (ctx // 1000, builder_at(cfg) // 1000))
+    return reason
 
 
 RULES = {
@@ -554,7 +642,7 @@ def handle_main_bash(command, project, cfg) -> None:
             continue
         decision = main_severity(cfg)
         if decision:
-            respond(decision, "[routing/main] " + REASONS[("main", cls)])
+            respond(decision, "[routing/main] " + main_reason(cls, cfg))
         sys.exit(0)
     sys.exit(0)
 
@@ -655,8 +743,9 @@ def handle_write(role, tool_input, project, cfg) -> None:
         if not decision:
             sys.exit(0)
 
-    reason = REASONS.get((role, cls)) or (
-        "Role `%s` may not write %s files. See the `route` skill." % (role, cls))
+    reason = (main_reason(cls, cfg) if role == "main" and ("main", cls) in REASONS
+              else REASONS.get((role, cls)) or (
+                  "Role `%s` may not write %s files. See the `route` skill." % (role, cls)))
     respond(decision, "[routing/%s] %s" % (role, reason))
 
 
@@ -668,6 +757,8 @@ def main() -> None:
     except Exception:
         sys.exit(0)  # never break the session on a malformed payload
 
+    global TRANSCRIPT
+    TRANSCRIPT = payload.get("transcript_path")
     role = normalize_role(payload.get("agent_type"))
     tool_input = payload.get("tool_input") or {}
     tool = payload.get("tool_name")

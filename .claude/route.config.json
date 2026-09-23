@@ -7,7 +7,6 @@
     "specs": "docs/agent/specs"
   },
   "models": { "scout": "haiku", "builder": "opus", "reviewer": "opus", "scribe": "haiku" },
-  "roles": { "builder": { "enabled": false } },
   "bookkeeping": {
     "enabled": true,
     "timezone": "Asia/Taipei",

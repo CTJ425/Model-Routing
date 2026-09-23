@@ -14,7 +14,6 @@ BASE_CONFIG = {
     "paths": {"prod": ["src/"], "docs": "docs/agent", "specs": "docs/agent/specs"},
     "models": {"scout": "haiku", "builder": "opus",
                "reviewer": "opus", "scribe": "haiku"},
-    # builder is off by default; most guard tests exercise a project that uses one.
     "roles": {"builder": {"enabled": True}},
 }
 

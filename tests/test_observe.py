@@ -132,8 +132,8 @@ def test_brief_survives_a_roles_block_that_is_not_an_object(roles, project):
 # --- the brief's guard line names only the edits the guard still asks about ---
 
 def test_brief_names_both_edit_asks_by_default(project):
-    assert ("before this session edits production code or a tracking record,\n"
-            "  dispatches a built-in agent") in brief(project)
+    assert ("before this session edits production code with its context over 60k tokens "
+            "or unknown or a tracking record,\n  dispatches a built-in agent") in brief(project)
 
 
 def test_brief_drops_the_production_ask_when_builder_is_off(project):
@@ -147,7 +147,8 @@ def test_brief_drops_the_record_ask_when_scribe_is_off(project):
     with_roles(project, scribe=False)
     text = brief(project)
     assert "tracking record" not in text
-    assert re.search(r"before this session\s+edits production code,\s+dispatches", text)
+    assert re.search(r"before this session\s+edits production code with its context over "
+                     r"60k tokens or unknown,\s+dispatches", text)
 
 
 def test_brief_drops_the_edit_ask_when_builder_and_scribe_are_off(project):
@@ -489,3 +490,21 @@ def test_a_passing_stop_does_not_carry_writes_into_the_next_turn(project):
     wrote(project, "src/a.ts")
     assert not stop(project, active=True)
     assert not stop(project)
+
+
+def test_brief_names_the_threshold_from_the_environment(project):
+    text = context(run_observe({"hook_event_name": "SessionStart", "session_id": "t1"},
+                               project, env_extra={"ROUTING_BUILDER_AT_K": "90"}))
+    assert "context over 90k tokens" in text
+
+
+@pytest.mark.parametrize("env,guard", [({"ROUTING_MAIN": "deny"}, {}),
+                                        ({}, {"mainSeverity": "deny"})])
+def test_brief_drops_the_threshold_under_deny(env, guard, project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["guard"] = guard
+    write_config(project, cfg)
+    text = context(run_observe({"hook_event_name": "SessionStart", "session_id": "t1"},
+                               project, env_extra=env))
+    assert "edits production code or a tracking record" in text
+    assert "tokens" not in text.split("edits production code")[1].split("\n")[0]

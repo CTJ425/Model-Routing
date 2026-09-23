@@ -273,12 +273,11 @@ def test_enabled_role_dispatches_silently(role, project):
     assert decision(dispatch("route:" + role, project)) is None
 
 
-def test_builder_is_the_only_role_off_by_default(project):
+def test_every_role_is_enabled_by_default(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
     del cfg["roles"]
     write_config(project, cfg)
-    assert decision(dispatch("route:builder", project)) == "deny"
-    for role in ("scout", "reviewer", "scribe"):
+    for role in ("scout", "builder", "reviewer", "scribe"):
         assert decision(dispatch("route:" + role, project)) is None
 
 
@@ -877,3 +876,96 @@ def test_a_disabled_role_is_denied_for_being_off_not_for_its_model(project):
     got = dispatch_with_model("route:builder", "opus", project)
     assert decision(got) == "deny"
     assert "roles.builder.enabled" in reason(got)
+
+
+# --- Lane 0 sized by the main session's context ---
+
+def transcript(project, tokens):
+    """A main transcript whose last API call carried `tokens` of context."""
+    path = project / "main.jsonl"
+    rows = [
+        {"type": "assistant", "message": {"usage": {"input_tokens": 5, "cache_read_input_tokens": 1000}}},
+        {"type": "user", "message": {"content": "ok"}},
+        {"type": "assistant", "message": {"usage": {
+            "input_tokens": 10, "cache_read_input_tokens": tokens - 110,
+            "cache_creation_input_tokens": 100}}},
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    return str(path)
+
+
+def main_write(project, tokens, cmd=None):
+    payload = {"agent_type": "", "transcript_path": transcript(project, tokens)}
+    if cmd:
+        payload.update(tool_name="Bash", tool_input={"command": cmd})
+    else:
+        payload.update(tool_name="Write", tool_input={"file_path": "src/a.ts", "content": "x"})
+    return run_guard(payload, project)
+
+
+def test_a_small_main_context_writes_production_code_with_no_ask(project):
+    assert decision(main_write(project, 30000)) is None
+
+
+def test_a_large_main_context_asks_and_names_its_size(project):
+    got = main_write(project, 90000)
+    assert decision(got) == "ask"
+    assert "about 90k tokens" in reason(got)
+    assert "guard.builderAtK" in reason(got)
+
+
+def test_the_threshold_is_configurable(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["guard"] = {"builderAtK": 100}
+    write_config(project, cfg)
+    assert decision(main_write(project, 90000)) is None
+
+
+def test_a_zero_threshold_always_asks(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["guard"] = {"builderAtK": 0}
+    write_config(project, cfg)
+    assert decision(main_write(project, 1000)) == "ask"
+
+
+def test_an_unreadable_transcript_keeps_the_ask(project):
+    got = run_guard({"tool_name": "Write", "agent_type": "", "transcript_path": "/nonexistent",
+                     "tool_input": {"file_path": "src/a.ts", "content": "x"}}, project)
+    assert decision(got) == "ask"
+
+
+def test_the_context_rule_applies_to_main_bash_writes(project):
+    assert decision(main_write(project, 30000, cmd="sed -i 's/a/b/' src/a.ts")) is None
+    assert decision(main_write(project, 90000, cmd="sed -i 's/a/b/' src/a.ts")) == "ask"
+
+
+def test_a_small_context_does_not_absorb_record_writes(project):
+    got = run_guard({"tool_name": "Write", "agent_type": "",
+                     "transcript_path": transcript(project, 1000),
+                     "tool_input": {"file_path": "docs/agent/TASK.md", "content": "x"}}, project)
+    assert decision(got) == "ask"
+
+
+def test_deny_severity_is_honoured_below_the_threshold(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["guard"] = {"mainSeverity": "deny"}
+    write_config(project, cfg)
+    assert decision(main_write(project, 1000)) == "deny"
+
+
+def test_context_skips_sidechain_synthetic_and_zero_rows(project):
+    path = project / "main.jsonl"
+    rows = [
+        {"type": "assistant", "message": {"usage": {"cache_read_input_tokens": 90000}}},
+        {"type": "assistant", "isSidechain": True,
+         "message": {"usage": {"cache_read_input_tokens": 1000}}},
+        {"type": "assistant", "message": {"model": "<synthetic>",
+                                          "usage": {"input_tokens": 0}}},
+        {"type": "assistant", "message": {"usage": {"input_tokens": 0}}},
+        {"type": "assistant", "message": {"usage": {"input_tokens": "n/a"}}},
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    got = run_guard({"tool_name": "Write", "agent_type": "", "transcript_path": str(path),
+                     "tool_input": {"file_path": "src/a.ts", "content": "x"}}, project)
+    assert decision(got) == "ask"
+    assert "about 90k tokens" in reason(got)

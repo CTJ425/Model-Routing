@@ -8,14 +8,17 @@ the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its ar
 
 ### Changed
 
-- `builder` is off by default (`roles.builder.enabled` defaults to `false`); the other
-  roles stay on. Replays of real tasks under an Opus 5.5 main session cost 40–50% more
-  with a builder, took longer, and measured no gain in accuracy
-  (`docs/field-reports/2026-09-23-*`). The main session implements, and its production
-  writes no longer ask. A project that wants a builder sets `roles.builder.enabled=true`.
-  `/route:doctor` reports the default roster as PASS.
+- The main session writes production code with no ask while its context is under
+  `guard.builderAtK` (default 60, thousands of tokens), read from the transcript's last
+  usage row; at or above it, `guard.mainSeverity` applies and the reason names the
+  context size. Measured under an Opus 5.5 main session (`docs/field-reports/2026-09-23-*`):
+  at about 26k of context the builder alone added $0.19–0.38 per task on average over the
+  main session implementing; tests passed either way, but on one task the arm with every
+  role off kept two production defects the other arms fixed. The long-session break-even
+  is an estimate (about 56k–89k), not a measurement. Unknown context keeps the ask, and
+  `mainSeverity: deny` always applies.
 - SKILL.md Lane 0 covers up to three known files and about 100 changed lines when the
-  failing tests already exist. A reviewer RISK on persistent state, a silent
+  failing tests already exist and the context is under `guard.builderAtK`. A reviewer RISK on persistent state, a silent
   calculation, authorization or a boundary is fixed now or named in the outcome with a
   one-line reason, instead of only being recorded.
 

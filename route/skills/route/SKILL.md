@@ -18,7 +18,7 @@ wrong cost, and how much subjective judgement is involved.
 
 | Lane | Use when | Path |
 | --- | --- | --- |
-| **0 — inline** | The edit is **bounded**: at most three files you can name and have read the relevant region of, about 100 changed lines or fewer, and either failing tests already written or a surgical change (a typo, a version bump, a one-line fix) — scout's map tells you *where* to edit, never *what the text is*, so a map alone is not enough. Trips none of the Step 4 review triggers, and you can name the verification command *before* editing | main session -> verify -> record (Step 6) |
+| **0 — inline** | The edit is **bounded**: at most three files you can name and have read the relevant region of, about 100 changed lines or fewer, and either failing tests already written or a surgical change (a typo, a version bump, a one-line fix) — scout's map tells you *where* to edit, never *what the text is*, so a map alone is not enough. **And this session's context is under `guard.builderAtK` (default 60k tokens)**: above it, every implementation turn here replays that context, and a builder dispatch costs less. The guard reads the context size from the transcript and asks on production writes only above the threshold. Trips none of the Step 4 review triggers, and you can name the verification command *before* editing | main session -> verify -> record (Step 6) |
 | **1 — bounded** (default) | A clear fix or feature inside known modules | `route:scout` (if the area is unmapped) -> brief -> `route:builder` -> `route:reviewer` (per Step 4 policy) -> `route:scribe` |
 | **2 — elevated risk** | Unknown-cause bug, cross-module change, or any of the Step 4 triggers known up front: persisted state, authorization, a boundary, a silent calculation, control-flow behaviour, or a builder blocker | `route:scout` -> spec + failing tests -> `route:builder` -> `route:reviewer` (always) -> adjudicate -> `route:scribe` |
 
@@ -57,6 +57,16 @@ are writing to describe it. When the work is genuinely small and low-risk, Lane 
 usually cheaper; use `/route:delta` to calibrate this decision for the project rather than
 treating the example above as a fixed threshold.
 
+The size of **this session's context** decides it as much as the size of the job. Measured
+under an Opus 5.5 main session (`docs/field-reports/2026-09-23-*`): in fresh sessions of
+about 26k context, the builder alone added $0.19–0.38 per task on average over the main
+session implementing. Tests passed either way, but on one task the arm with every role off
+kept two production defects that the other arms fixed. Estimated, not measured: each
+implementation turn here replays this session's context ($0.06 per 10k tokens over ~30
+turns), so the builder pays for itself from about 56k (the session runs on) to 89k (it
+ends after the task). `guard.builderAtK` (default 60) is that line until a long-session
+replay measures it.
+
 This is a sizing question, not a risk question. It never overrides Step 4 — a change that
 trips a review trigger gets reviewed however small it is.
 
@@ -79,12 +89,8 @@ Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
 
 `roles.<role>.enabled` decides whether a role exists for this project at all. A role set
 to `false` is denied by the guard, so do not dispatch it: skip that step and do its work
-in this session, then say in one line which step you absorbed and why. `builder`
-defaults to `false` and the other roles to `true`; `scout.enabled` is a legacy alias that
-still works. Builder is off by default because replays of real tasks under an Opus 5.5
-main session (`docs/field-reports/2026-09-23-*`) cost 40–50% more with a builder, took
-longer, and measured no gain in accuracy: the main session implements Lane 0 and Lane 1
-work itself unless a project turns builder on.
+in this session, then say in one line which step you absorbed and why. Every role
+defaults to `true`, and `scout.enabled` is a legacy alias that still works.
 
 If `models.<role>` is set for the role you are about to dispatch, pass it explicitly as
 the `model` parameter on the Agent call — this takes precedence over the agent file's own

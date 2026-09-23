@@ -147,15 +147,25 @@ def roster_clause(cfg, bookkeeping: bool) -> str:
 def edit_clause(cfg, bookkeeping: bool) -> str:
     """The **Guards will ask** bullet names only the edits the guard still asks about.
     With `roles.builder.enabled` false the guard absorbs a production-code write into
-    the main session silently, and the same holds for a tracking record with
+    the main session silently (and below `guard.builderAtK` of context even with it on), and the same holds for a tracking record with
     `roles.scribe.enabled` false (see routing_guard._main_write_absorbed).
     """
     builder_on = role_enabled(cfg, "builder")
     records_live = bookkeeping and role_enabled(cfg, "scribe")
+    # Below guard.builderAtK the guard lets the main session implement with no ask.
+    try:
+        at = int(os.environ.get("ROUTING_BUILDER_AT_K")
+                 or (cfg.get("guard") or {}).get("builderAtK", 60))
+    except (TypeError, ValueError):
+        at = 60
+    severe = (os.environ.get("ROUTING_MAIN") or (cfg.get("guard") or {}).get(
+        "mainSeverity") or "ask").lower() == "deny"
+    prod = ("edits production code with its context over %dk tokens or unknown" % at
+            if at > 0 and not severe else "edits production code")
     if builder_on and records_live:
-        return "edits production code or a tracking record,\n  "
+        return prod + " or a tracking record,\n  "
     if builder_on:
-        return "edits production code,\n  "
+        return prod + ",\n  "
     if records_live:
         return "edits a tracking record,\n  "
     return ""
