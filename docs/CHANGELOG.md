@@ -4,6 +4,60 @@ All notable changes to the `route` plugin. This file is the source of truth from
 onward; releases 0.9.0 and earlier live in the git tags and their GitHub Releases, and
 the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its archive.
 
+## [0.13.0] - 2026-10-09
+
+The main session now decides whether to delegate, a builder works only from a spec, and
+builder and reviewer move to Sonnet 5.5. This release continues from 0.10.0: the 0.11.0
+and 0.12.0 numbers belonged to a scout-and-scribe-only line that is not part of this
+history, so they are skipped rather than reused.
+
+### Changed
+
+- **Role tiers.** scout `haiku` at medium effort (was low), builder `sonnet` at medium
+  (was `opus`), scribe `haiku` at medium (was low), reviewer `sonnet` at xhigh (was `opus`
+  at medium). The tiers are model aliases, which Claude Code resolves to the 5.5 models;
+  the guard compares aliases, so full model ids do not belong in `models.<role>`.
+- **The main session decides delegation.** `guard.mainSeverity` now defaults to `off`: the
+  guard no longer asks before the main session writes production code or a tracking
+  record. A large unbounded Read (`guard.readKB`) and a built-in discovery agent
+  (`Explore`, `Plan`, `general-purpose`, `claude`) now get a cost hint in context and go
+  through; they used to ask. `ask` and `deny` stay available as a project's choice.
+- **The brief and the skill are descriptive.** The SessionStart brief says delegation is
+  the session's call and names the `route` skill as a playbook to load when it is about to
+  delegate; the skill description and Step 0 no longer order a lane to be stated before
+  every task. On a synthetic three-file project (Sonnet 5.5 main, one run per cell), the
+  old brief loaded the skill and dispatched builder and reviewer even for a one-constant
+  change (USD 0.50); the new one loaded it in none of three tasks and dispatched nothing
+  (USD 0.06-0.17). Small sample, small project: read it as a direction.
+- **The review reminder lists the triggers.** After the main session's first
+  production-code write in a round, it says to dispatch `route:reviewer` before finishing
+  when the change touches state that outlives the process, an authorization decision, or a
+  calculation whose wrong answer is silent, and lists the other triggers as conditions.
+  It appears once per round, until a `reviewer` is dispatched, and never blocks.
+
+### Added
+
+- `guard.builderNeedsSpec` (default `true`). A `route:builder` dispatch is denied unless it
+  carries a brief (a `Files:` line that names at least one path, and a `Verify:` line) or
+  the path of a spec file with a `## Files` section. The builder may then write only the
+  files that list names (a path, a directory ending in `/`, or a glob), through
+  `Write`/`Edit` and Bash alike. The Agent call carries no `agent_id`, so a dispatch is
+  matched to its builder by the first in-scope write; with no recorded dispatch the guard
+  fails open. Parallel builders need disjoint lists.
+- `builder.md` says to change nothing and report `BLOCKED` when the `Files` list or the
+  `Verify` command is missing.
+
+### Removed
+
+- The `Stop` hook and the blocking review gate it enforced.
+
+### Breaking
+
+- The guard no longer asks about the main session's production or record writes, large
+  reads or built-in discovery agents unless `guard.mainSeverity` is set to `ask` or `deny`.
+- A builder dispatch with no brief or spec is denied; set `guard.builderNeedsSpec` to
+  `false` to restore the old behaviour.
+
 ## [0.10.0] - 2026-09-23
 
 ### Changed
