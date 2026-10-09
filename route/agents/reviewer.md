@@ -1,8 +1,8 @@
 ---
 name: reviewer
 description: Use to review code a builder has just produced. Requires the builder's changed-file list plus either the inline brief or a spec path — an inline brief is sufficient and is the normal case for bounded work. Returns findings only, never fixes.
-model: opus
-effort: medium
+model: sonnet
+effort: xhigh
 maxTurns: 80
 tools: Read, Glob, Grep
 ---

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Makes routing observable, so "we delegate" is a measurable claim and not a belief.
 
-Six jobs, selected by hook_event_name:
+Six jobs, selected by hook_event_name. Every one of them informs the main session; none
+blocks it. Whether to delegate is the main session's call.
 
-  SessionStart                  -> put the routing rule in context. `route` is a skill,
-      so it only runs if the main session decides to load it, and nothing else prompts
-      that. A few hundred tokens once per session is the cheapest fix available.
+  SessionStart                  -> put the roster and the cost model in context. `route`
+      is a skill, so it only runs if the main session decides to load it, and nothing
+      else tells it the skill exists or what it holds. A few hundred tokens once per
+      session is the cheapest way to let it decide with the facts.
 
   SubagentStart / SubagentStop  -> append one line to .claude/routing/dispatch.jsonl.
       This is the audit trail: which roles actually ran, at what effort, when, and
@@ -18,16 +20,16 @@ Six jobs, selected by hook_event_name:
       so, in context, while the leak is still happening.
 
   PostToolUse(Agent|Task)       -> on a `builder` dispatch, restate the review policy.
-      Every other failure mode in this system announces itself; a skipped review was
-      the one that was completely silent. A background dispatch returns its launch,
-      not its result, so the wording says "plan the review" there and "review now"
-      only when the tool result really is the agent's.
+      A background dispatch returns its launch, not its result, so the wording says
+      "plan the review" there and "review now" only when the tool result really is the
+      agent's.
 
-  PostToolUse(Write|Edit|NotebookEdit) + Stop -> remember the production files written
-      since the last `reviewer` dispatch, and block the first Stop while that list is
-      not empty. Replays found the review skipped on a silent-calculation task in 2 of 3
-      sessions; the builder-return nudge cannot catch it once builder is off. One block,
-      then Stop passes: a one-line "trigger checked, none fires" is a valid answer.
+  PostToolUse(Write|Edit|NotebookEdit) -> remember the production files written since
+      the last `reviewer` dispatch, and on the main session's first such write remind it
+      of the review policy, once per round. Replays found the review skipped on a
+      silent-calculation task in 2 of 3 sessions; the builder-return reminder cannot
+      cover a session that implemented the change itself. A reminder, not a gate: it
+      used to block the first Stop, and no longer does.
 
   SessionEnd                    -> delete this session's state files.
 
@@ -105,18 +107,24 @@ def log_dispatch(payload, d: str) -> None:
                             ensure_ascii=False) + "\n")
 
 
-BRIEF_HEAD = """[routing] This project delegates. Before acting on a feature or a bug, load the
-`route` skill and state the lane in one line.
+BRIEF_HEAD = """[routing] The `route` subagents are available in this project. Whether to
+delegate to them is your call; nothing here requires it.
 
-- **Cost here is context replay, not output.** Replaying context into the main
-  session's window is billed on every remaining turn of the session, so bulk content
-  goes to a subagent even when the task looks trivial.
-- **Roster.** This session plans, writes specs, and adjudicates.{roster_clause}
+- **Where the cost is.** Context replay, not output: whatever enters this session's
+  context is re-billed on every remaining turn. A subagent keeps bulk (a large file, a
+  long log, a multi-file edit) out of it and returns a short answer, but it pays a cold
+  start of its own, so a job that fits inside the prompt you would write to hand it over
+  is cheaper done here.
+- **Roster.** This session plans, decides and adjudicates.{roster_clause}
   Per-role model tiers live in `.claude/route.config.json` (see `/route:config`).
-- **Guards will ask** before this session {edit_clause}dispatches a built-in agent that runs on this session's model (`Explore`, `Plan`,
-  `general-purpose`, `claude`, or no type at all), or issues an unbounded Read
-  over {read_kb}KB.
-  An `ask` is policy, not an obstacle: take the cheaper path it names."""
+- **The `route` skill** is a playbook, not a procedure: lanes, the brief and spec
+  formats, the review triggers and the dispatch-floor arithmetic. Load it when you are
+  about to delegate a build, a review or a record and want those rules; skip it for
+  work you do here.
+- **Hints, not gates.** A large unbounded read, or a built-in agent that runs on this
+  session's model (`Explore`, `Plan`, `general-purpose`, `claude`), gets a cost hint
+  in context and goes through. What each subagent may write is still enforced by the
+  guard.{edit_clause}"""
 
 ROSTER_CLAUSE = {
     "scout": "`scout` reads and compresses",
@@ -145,30 +153,29 @@ def roster_clause(cfg, bookkeeping: bool) -> str:
 
 
 def edit_clause(cfg, bookkeeping: bool) -> str:
-    """The **Guards will ask** bullet names only the edits the guard still asks about.
-    With `roles.builder.enabled` false the guard absorbs a production-code write into
-    the main session silently (and below `guard.builderAtK` of context even with it on), and the same holds for a tracking record with
-    `roles.scribe.enabled` false (see routing_guard._main_write_absorbed).
-    """
-    builder_on = role_enabled(cfg, "builder")
-    records_live = bookkeeping and role_enabled(cfg, "scribe")
-    # Below guard.builderAtK the guard lets the main session implement with no ask.
+    """Names the main-session edits this project's guard still asks about or denies.
+    Empty by default: `guard.mainSeverity` is off, and an off role is absorbed silently
+    (see routing_guard._main_write_absorbed)."""
+    level = (os.environ.get("ROUTING_MAIN") or (cfg.get("guard") or {}).get(
+        "mainSeverity") or "off").lower()
+    if level not in ("ask", "deny"):
+        return ""
     try:
         at = int(os.environ.get("ROUTING_BUILDER_AT_K")
                  or (cfg.get("guard") or {}).get("builderAtK", 60))
     except (TypeError, ValueError):
         at = 60
-    severe = (os.environ.get("ROUTING_MAIN") or (cfg.get("guard") or {}).get(
-        "mainSeverity") or "ask").lower() == "deny"
-    prod = ("edits production code with its context over %dk tokens or unknown" % at
-            if at > 0 and not severe else "edits production code")
-    if builder_on and records_live:
-        return prod + " or a tracking record,\n  "
-    if builder_on:
-        return prod + ",\n  "
-    if records_live:
-        return "edits a tracking record,\n  "
-    return ""
+    targets = []
+    if role_enabled(cfg, "builder"):
+        targets.append("production code with its context over %dk tokens or unknown" % at
+                       if at > 0 and level == "ask" else "production code")
+    if bookkeeping and role_enabled(cfg, "scribe"):
+        targets.append("a tracking record")
+    if not targets:
+        return ""
+    verb = "denies" if level == "deny" else "asks before"
+    return "\n  This project's guard also %s this session editing %s." % (
+        verb, " or ".join(targets))
 
 
 REVIEW_TRIGGER_TEXT = {
@@ -179,6 +186,32 @@ REVIEW_TRIGGER_TEXT = {
     "silent_calculation": "it touches a calculation whose wrong answer is silent",
     "control_flow": "it changes control flow, error handling, concurrency, retry, or timeout behaviour",
     "builder_blocker": "builder reported a blocker",
+}
+
+
+def trigger_ids(cfg, skip=()) -> list:
+    """-> the review trigger ids in force; empty when `review.triggers` is an empty list.
+    `skip` drops ids that cannot apply to the caller."""
+    configured = (cfg.get("review") or {}).get("triggers")
+    ids = DEFAULT_REVIEW_TRIGGERS if configured is None else configured
+    if not isinstance(ids, list):
+        ids = list(REVIEW_TRIGGER_TEXT)
+    return [str(i) for i in ids if i not in skip]
+
+
+def trigger_clauses(cfg, skip=()) -> list:
+    """-> the review triggers in force, as sentence fragments."""
+    return [REVIEW_TRIGGER_TEXT.get(i, "the configured trigger `%s`" % i)
+            for i in trigger_ids(cfg, skip)]
+
+
+# Triggers where a wrong answer stays silent: green tests, a clean run and the absence of
+# an error all look the same whether the change is right or wrong. These get a firm
+# "dispatch" rather than a "consider".
+STRONG_TRIGGER_PHRASE = {
+    "persistent_state": "state that outlives the process",
+    "authorization": "an authorization or access-control decision",
+    "silent_calculation": "a calculation whose wrong answer is silent",
 }
 
 
@@ -200,13 +233,7 @@ def review_nudge(cfg, launched: bool = False) -> str:
     if policy == "always":
         condition = "every builder round"
     else:
-        configured = review.get("triggers")
-        trigger_ids = (DEFAULT_REVIEW_TRIGGERS if configured is None else configured)
-        if isinstance(trigger_ids, list):
-            clauses = [REVIEW_TRIGGER_TEXT.get(str(item),
-                       "the configured trigger `%s`" % item) for item in trigger_ids]
-        else:
-            clauses = list(REVIEW_TRIGGER_TEXT.values())
+        clauses = trigger_clauses(cfg)
         if not clauses:
             return (
                 lead + "`review.policy` is `risk`, but no automatic risk triggers are "
@@ -264,7 +291,6 @@ def emit_brief(payload) -> None:
     bookkeeping = bool((cfg.get("bookkeeping") or {}).get("enabled"))
 
     text = BRIEF_HEAD.format(
-        read_kb=cfg["guard"].get("readKB", 32),
         roster_clause=roster_clause(cfg, bookkeeping),
         edit_clause=edit_clause(cfg, bookkeeping),
     )
@@ -371,27 +397,32 @@ def _pending_path(payload, d: str):
     return os.path.join(d, "state", "%s.review" % session) if session else None
 
 
-def note_write(payload, d: str) -> None:
-    """Record a production-code write, from the main session or any subagent."""
+def note_write(payload, d: str):
+    """Record a production-code write, from the main session or any subagent.
+
+    -> the file's relative path when it opens a round (nothing was pending since the last
+    reviewer dispatch), else None."""
     path = _pending_path(payload, d)
     tool_input = payload.get("tool_input") or {}
     target = tool_input.get("file_path") or tool_input.get("notebook_path")
     if not path or not target:
-        return
+        return None
     project = project_dir(payload)
     cfg = load_config(project)
     rel = strip_worktree(rel_path(target, project))
     paths = cfg.get("paths") or {}
     if not rel or not matches_any(rel, paths.get("prod")) or matches_any(rel, paths.get("test")):
-        return
+        return None
     try:
         with open(path, encoding="utf-8") as fh:
-            seen = fh.read().split("\n")
+            seen = [line for line in fh.read().split("\n") if line]
     except OSError:
         seen = []
-    if rel not in seen:
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(rel + "\n")
+    if rel in seen:
+        return None
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(rel + "\n")
+    return None if seen else rel
 
 
 def clear_review(payload, d: str) -> None:
@@ -400,36 +431,48 @@ def clear_review(payload, d: str) -> None:
         os.remove(path)
 
 
-def stop_reason(cfg, files) -> str:
-    shown = ", ".join(files[:5]) + (" and %d more" % (len(files) - 5) if len(files) > 5 else "")
+def review_hint(cfg, rel: str) -> str:
     policy = (cfg.get("review") or {}).get("policy", "risk")
-    head = "[routing] Production code changed since the last review: %s. " % shown
+    head = "[routing] Production code changed: %s. " % rel
     if not role_enabled(cfg, "reviewer"):
-        return head + ("`roles.reviewer.enabled` is false, so review the diff yourself "
-                       "against the Step 4 triggers and say so in one line, then finish.")
+        return head + ("`roles.reviewer.enabled` is false, so when this round is done, "
+                       "review the diff yourself against the Step 4 triggers and say so "
+                       "in one line.")
     if policy == "always":
-        return head + "`review.policy` is `always`: dispatch `route:reviewer` with the diff."
-    return head + ("Apply the Step 4 review policy before you finish: dispatch "
-                   "`route:reviewer` with the diff, or state in one line which trigger "
-                   "you checked and why none fires.")
+        return head + ("`review.policy` is `always`: when this round is done, dispatch "
+                       "`route:reviewer` with the diff.")
+    # `builder_blocker` is a builder's report; this session wrote the change.
+    ids = trigger_ids(cfg, skip=("builder_blocker",))
+    if not ids:
+        return head + ("`review.policy` is `risk` and no automatic risk triggers are "
+                       "configured: dispatch `route:reviewer` with the diff only if you "
+                       "judge this round needs one. This reminder appears once per round.")
+    strong = [STRONG_TRIGGER_PHRASE[i] for i in ids if i in STRONG_TRIGGER_PHRASE]
+    rest = [REVIEW_TRIGGER_TEXT.get(i, "the configured trigger `%s`" % i)
+            for i in ids if i not in STRONG_TRIGGER_PHRASE]
+    text = head
+    if strong:
+        text += ("If this round touches %s, dispatch `route:reviewer` with the diff before "
+                 "you finish: a green test only shows the test agreed with the code, and "
+                 "these are the failures that stay silent. " % ", ".join(strong))
+    if rest:
+        lead = ("Also dispatch it" if strong else
+                "When this round is done, dispatch `route:reviewer` with the diff")
+        text += "%s if any of these holds: %s. " % (lead, "; ".join(rest))
+    return text + ("Otherwise say in one line which you checked and why none does (the "
+                   "`route` skill, Step 4, has the detail). This reminder appears once "
+                   "per round.")
 
 
-def handle_stop(payload, d: str) -> None:
-    path = _pending_path(payload, d)
-    try:
-        with open(path, encoding="utf-8") as fh:
-            files = [line for line in fh.read().split("\n") if line]
-        # Cleared on every Stop, blocked or not: a list kept past a passing Stop would
-        # block a later turn on writes it did not make.
-        os.remove(path)
-    except (OSError, TypeError):
-        return
+def handle_main_write(payload, rel: str) -> None:
     cfg = load_config(project_dir(payload))
     review = cfg.get("review") or {}
-    if (not files or payload.get("stop_hook_active") or review.get("policy") == "never"
-            or not review.get("nudge", True)):
+    if review.get("policy") == "never" or not review.get("nudge", True):
         return
-    print(json.dumps({"decision": "block", "reason": stop_reason(cfg, files)}))
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "additionalContext": review_hint(cfg, rel),
+    }}))
 
 
 def clear_state(payload, d: str) -> None:
@@ -467,12 +510,10 @@ def main() -> None:
         log_dispatch(payload, d)
         sys.exit(0)
 
-    if event == "Stop":
-        handle_stop(payload, d)
-        sys.exit(0)
-
     if payload.get("tool_name") in WRITE_TOOLS:
-        note_write(payload, d)
+        opened = note_write(payload, d)
+        if opened and normalize_role(payload.get("agent_type")) == "main":
+            handle_main_write(payload, opened)
         sys.exit(0)
 
     # A subagent doing discovery, or spawning nothing, is the system working as designed.

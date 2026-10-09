@@ -54,6 +54,13 @@ def decision(result):
     return result.get("hookSpecificOutput", {}).get("permissionDecision")
 
 
+def hint_text(result):
+    """-> the additionalContext a hook handed Claude, or ''."""
+    if not result:
+        return ""
+    return result.get("hookSpecificOutput", {}).get("additionalContext", "")
+
+
 def reason(result):
     if not result:
         return ""

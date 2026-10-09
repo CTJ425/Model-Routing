@@ -1,35 +1,43 @@
 ---
 name: route
-description: Run a task through the model-routing loop — classify it into a lane, dispatch scout/builder/reviewer/scribe at their own model tiers, and verify. Use when starting a feature, fixing a bug, working through a tracking doc's open items, or when the user says "route this", "run the next task", or asks why everything is running on the most expensive model.
+description: Playbook for handing work to the route subagents — scout (map and compress), builder (implement), reviewer (check risk), scribe (record) — each at its own model tier. Delegation is optional and the main session decides. Load it when you are about to delegate a build, a review or a record and want the lane, brief, review and adjudication rules, when a task is bulk reading or a large multi-file change you may want to keep out of your own context, or when the user says "route this", "run the next task", or asks why everything is running on the most expensive model.
 ---
 
-# Routing loop
+# Routing playbook
 
-You are the Boss. The main session holds the plan and spends as few of its own tokens
-as possible doing it. Everything verbose happens in a subagent and comes back small.
+The main session decides whether to delegate, to which role, and when. This playbook is
+what to know once it does: which jobs pay for a dispatch, how to size and brief one, and
+how to judge what comes back. No step below is owed on every task. A task done entirely
+in this session is a valid outcome, and the arithmetic in Step 0.25 is all the
+justification a skipped dispatch needs.
 
-Delegation here is **pre-authorized** — dispatching these agents is the requested
-behaviour, not something to ask permission for each time.
+You are the Boss: the main session holds the plan and spends as few of its own tokens as
+it sensibly can. Verbose work is a candidate for a subagent and comes back small.
 
-## Step 0 — classify the lane
+Delegation here is **pre-authorized** — dispatching these agents is allowed without
+asking the user each time.
+
+## Step 0 — pick a lane, when you route
 
 Answer three questions about the task: how much inference does it need, what does being
 wrong cost, and how much subjective judgement is involved.
 
 | Lane | Use when | Path |
 | --- | --- | --- |
-| **0 — inline** | The edit is **bounded**: at most three files you can name and have read the relevant region of, about 100 changed lines or fewer, and either failing tests already written or a surgical change (a typo, a version bump, a one-line fix) — scout's map tells you *where* to edit, never *what the text is*, so a map alone is not enough. **And this session's context is under `guard.builderAtK` (default 60k tokens)**: above it, every implementation turn here replays that context, and a builder dispatch costs less. The guard reads the context size from the transcript and asks on production writes only above the threshold. Trips none of the Step 4 review triggers, and you can name the verification command *before* editing | main session -> verify -> record (Step 6) |
+| **0 — inline** | The edit is **bounded**: at most three files you can name and have read the relevant region of, about 100 changed lines or fewer, and either failing tests already written or a surgical change (a typo, a version bump, a one-line fix) — scout's map tells you *where* to edit, never *what the text is*, so a map alone is not enough. **And this session's context is under `guard.builderAtK` (default 60k tokens)**: above it, every implementation turn here replays that context, and a builder dispatch costs less. It is a rule of thumb: the guard reads the context size from the transcript only when a project set `guard.mainSeverity` to `ask`, and then asks above the threshold. Trips none of the Step 4 review triggers, and you can name the verification command *before* editing | main session -> verify -> record (Step 6) |
 | **1 — bounded** (default) | A clear fix or feature inside known modules | `route:scout` (if the area is unmapped) -> brief -> `route:builder` -> `route:reviewer` (per Step 4 policy) -> `route:scribe` |
 | **2 — elevated risk** | Unknown-cause bug, cross-module change, or any of the Step 4 triggers known up front: persisted state, authorization, a boundary, a silent calculation, control-flow behaviour, or a builder blocker | `route:scout` -> spec + failing tests -> `route:builder` -> `route:reviewer` (always) -> adjudicate -> `route:scribe` |
 
-State the lane in one line before you act. If you pick Lane 0 for a tracked task,
-record why in the project's progress log.
+When you route a task, say the lane in one line so the user can follow. A task you do
+entirely here needs no lane. If you pick Lane 0 for a tracked task, record why in the
+project's progress log.
 
-A Lane 0 edit is still a main-session write to production code, so `guard.mainSeverity`
-applies to it — through `Write`/`Edit` and through the shell alike. Confirming that prompt
-is how a Lane 0 call gets recorded; routing around it with `sed -i` is not. When
-`roles.builder.enabled` is `false`, this session is the implementer and the guard does
-not ask.
+By default (`guard.mainSeverity: off`) the guard does not ask about a Lane 0 edit, through
+`Write`/`Edit` or the shell. A project that set `ask` or `deny` has decided otherwise: `ask`
+prompts on production writes above `guard.builderAtK`, and `deny` means this session never
+writes production code. Honour that choice rather than routing around it with `sed -i`.
+When `roles.builder.enabled` is `false`, this session is the implementer and the guard
+does not ask.
 
 ## Step 0.25 — weigh the job against the dispatch floor
 
@@ -65,7 +73,7 @@ kept two production defects that the other arms fixed. Estimated, not measured: 
 implementation turn here replays this session's context ($0.06 per 10k tokens over ~30
 turns), so the builder pays for itself from about 56k (the session runs on) to 89k (it
 ends after the task). `guard.builderAtK` (default 60) is that line until a long-session
-replay measures it.
+replay measures it; read it as a rule of thumb, since no hook enforces it by default.
 
 This is a sizing question, not a risk question. It never overrides Step 4 — a change that
 trips a review trigger gets reviewed however small it is.
@@ -79,7 +87,7 @@ Before every dispatch in Steps 1, 3, 4 and 6, check the project root for
 {
   "version": 2,
   "paths": { "prod": ["src/"] },
-  "models": { "scout": "haiku", "builder": "opus", "reviewer": "opus", "scribe": "haiku" },
+  "models": { "scout": "haiku", "builder": "sonnet", "reviewer": "sonnet", "scribe": "haiku" },
   "roles": { "scout": { "enabled": true }, "builder": { "enabled": true },
              "reviewer": { "enabled": true }, "scribe": { "enabled": true } },
   "review": { "policy": "risk" },
@@ -123,13 +131,13 @@ pipeline", always "where is X chosen, who calls it, which tests cover it". You g
 ~40 lines. This is the single largest token saving in the system.
 
 If you have made a dozen Read/Grep calls yourself, you are doing scout's work at several
-times the price; a hook will tell you so.
+times the price; a hook adds a note at that point (`guard.scoutAt`), and handing it to
+scout is your call.
 
-Dispatch it as `route:scout`. Do not reach for the built-in `Explore`, `Plan`,
-`general-purpose` or `claude` agents, or an Agent call with no type (which runs
-`general-purpose`), instead — they run on the caller's model, so they do scout's job at
-the caller's price. A PreToolUse guard asks before letting one through; confirm
-only when you need a tool scout lacks.
+Dispatch it as `route:scout`. The built-in `Explore`, `Plan`, `general-purpose` and
+`claude` agents, and an Agent call with no type (which runs `general-purpose`), run on the
+caller's model, so they do scout's job at the caller's price. Using one adds a cost hint
+and goes through; choose it when you need a tool scout lacks.
 
 Scout has no Bash. If the material to compress is command output, put the text in the
 dispatch prompt or write it to a file and give scout the path.
@@ -179,9 +187,13 @@ expanded, add a `## Test charter` table (`| Case | Expected outcome | Layer / fi
 and write the failing tests **before** dispatching. Pass builder the spec path and the
 test path only.
 
-The `Files` list is the builder's task-level contract. The PreToolUse guard blocks role-level
-categories, but it cannot inspect the inline prompt or spec to enforce an arbitrary per-task
-file list. The builder and reviewer must therefore report and check that list explicitly.
+The `Files` list is the builder's task-level contract, and the PreToolUse guard enforces it. A
+`route:builder` dispatch is denied unless it carries a brief (a `Files:` line that names at
+least one path, and a `Verify:` line) or the path of a spec file with a `## Files` section.
+Once dispatched, the builder can write only the paths that list names: a file, a directory
+ending in `/`, or a glob. List every file the task creates or changes, new ones included.
+The builder still reports the files it changed and reviewer checks them against the list;
+`guard.builderNeedsSpec: false` turns the guard's two checks off.
 
 ### Prove the input before you dispatch
 
@@ -201,7 +213,7 @@ the rework lands two rounds later. Four checks, each cheap, each having caught a
   that is right in the happy path. Write what it must *not* do, and why — that sentence is
   what stops a later change from reintroducing the defect the spec exists to prevent.
 
-## Step 3 — build (opus by default)
+## Step 3 — build (sonnet by default)
 
 When `roles.builder.enabled` is `false` the guard denies the dispatch and this session
 writes the code itself, still against the Step 2 input and the same Verify command. The
@@ -229,7 +241,7 @@ Independent tasks may go out as parallel `route:builder` calls only when their `
 are disjoint and they do not share generated state. Otherwise dispatch them sequentially;
 parallel builders share a worktree and can overwrite one another.
 
-## Step 4 — review (opus by default)
+## Step 4 — review (sonnet by default)
 
 Skip this step entirely when `roles.reviewer.enabled` is `false` — the guard denies the
 dispatch, so review it yourself here and say so in one line.
@@ -279,8 +291,9 @@ means no automatic risk trigger. `review.policy=always` still reviews every buil
 When `roles.builder.enabled` is `false`, this session produces what builder would
 report: the changed-file list and the `VERIFY:`, `TESTS:` and `LINT:` lines, in
 builder's format, from commands this session ran. Every implementation round of this
-session counts as a builder round for `review.policy`. The review nudge fires only
-when a `builder` dispatch returns, so apply the policy here without it.
+session counts as a builder round for `review.policy`. The builder-return nudge fires only
+when a `builder` dispatch returns; when this session implements, you get the once-per-round
+reminder on its first production write instead, so apply the policy there.
 
 Pass reviewer the brief **or** the spec path, plus builder's reported file list and
 `VERIFY:`, `TESTS:`, and `LINT:` lines. Reviewer has no Bash — it reads builder's reported
@@ -303,9 +316,9 @@ prose contract. That is both the larger read and the weaker signal.
 
 If you skip review, say so in one line and name which trigger you checked. A silent
 skip is how this step stopped happening.
-A Stop hook now enforces it: after a production-code write with no later `reviewer`
-dispatch, the first Stop is blocked until you dispatch the reviewer or name the trigger
-you checked. Replays had skipped review on a silent-calculation task in 2 of 3 sessions.
+A hook reminds you once per round, on this session's first production-code write after
+the last `reviewer` dispatch (`review.nudge`); it never blocks. Replays had skipped review
+on a silent-calculation task in 2 of 3 sessions.
 
 ## Step 5 — adjudicate (main session only)
 
@@ -344,8 +357,8 @@ Otherwise dispatch `route:scribe` with the outcome: task id (or `?`), files chan
 Verify result, test counts when applicable, lint result, reviewer verdict, accepted risks,
 the language from `language.artifacts`, and the timezone from `bookkeeping.timezone`.
 There is no implicit `version` field; pass one only when the task explicitly defines it.
-Do not update the tracking docs yourself — it is mechanical work at the most expensive rate
-in the system, and a hook will ask you to reconsider if you try.
+Updating the tracking docs yourself is mechanical work at the most expensive rate in the
+system; past a line or two, hand it to scribe.
 
 **Hand scribe finished prose for anything a human will read later** — a changelog entry, a
 release note, a commit-message body. Scribe places text; composing it from notes is
@@ -369,10 +382,10 @@ cost less than one that has to be resumed.
 **What decides is how much bookkeeping there is, not which lane produced it.** Dispatch
 scribe when there is real work in the record — several files to list, a risk to write up,
 entries to move into an archive, a commit message to compose. Append the line yourself when
-the record is one or two lines, whatever the lane. Two projects will behave differently: one
-that set `guard.mainSeverity` to `deny` has decided the Boss never writes records, so
-dispatch scribe there regardless; one that set it to `off` gets no prompt at all, so write
-the line and move on.
+the record is one or two lines, whatever the lane. Projects differ: one that set
+`guard.mainSeverity` to `deny` has decided the Boss never writes records, so dispatch scribe
+there regardless, and `ask` prompts on a record write. By default (`off`) nothing prompts:
+write the line and move on.
 
 On one session of this project a scribe dispatch that appended a short outcome returned a
 net context saving of about 260 tokens against a dispatch cost of about 1,230 — it did not

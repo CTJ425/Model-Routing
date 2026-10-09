@@ -55,11 +55,19 @@ def test_brief_drops_bookkeeping_language_when_disabled(project):
     assert "tracking record" not in text
 
 
-def test_brief_reports_the_configured_read_threshold(project):
-    cfg = json.loads(json.dumps(BASE_CONFIG))
-    cfg["guard"] = {"readKB": 64}
-    write_config(project, cfg)
-    assert "over 64KB" in brief(project)
+def test_brief_leaves_delegation_to_the_session(project):
+    text = brief(project)
+    assert "is your call" in text
+    assert "nothing here requires it" in text
+    assert "Hints, not gates" in text
+    assert "playbook, not a procedure" in text
+
+
+def test_brief_no_longer_orders_the_skill_or_threatens_a_prompt(project):
+    text = brief(project)
+    assert "load the" not in text.split("**The `route` skill**")[0]
+    assert "state the lane" not in text.lower()
+    assert "Guards will ask" not in text
 
 
 def test_brief_omits_scout_from_roster_when_disabled(project):
@@ -129,26 +137,34 @@ def test_brief_survives_a_roles_block_that_is_not_an_object(roles, project):
     assert "`builder` implements" in brief(project)
 
 
-# --- the brief's guard line names only the edits the guard still asks about ---
+# --- the brief names only the main-session edits the guard still asks about ---
 
-def test_brief_names_both_edit_asks_by_default(project):
-    assert ("before this session edits production code with its context over 60k tokens "
-            "or unknown or a tracking record,\n  dispatches a built-in agent") in brief(project)
+def test_brief_names_no_edit_ask_by_default(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    del cfg["guard"]
+    write_config(project, cfg)
+    assert "This project's guard also" not in brief(project)
+
+
+def test_brief_names_both_edit_asks_when_the_project_opts_in(project):
+    assert re.search(r"guard also asks before this session editing production code with "
+                     r"its context over 60k tokens or unknown or a tracking record\.",
+                     brief(project))
 
 
 def test_brief_drops_the_production_ask_when_builder_is_off(project):
     with_roles(project, builder=False)
     text = brief(project)
     assert "production code" not in text
-    assert re.search(r"before this session\s+edits a tracking record,\s+dispatches", text)
+    assert "guard also asks before this session editing a tracking record." in text
 
 
 def test_brief_drops_the_record_ask_when_scribe_is_off(project):
     with_roles(project, scribe=False)
     text = brief(project)
     assert "tracking record" not in text
-    assert re.search(r"before this session\s+edits production code with its context over "
-                     r"60k tokens or unknown,\s+dispatches", text)
+    assert ("guard also asks before this session editing production code with its "
+            "context over 60k tokens or unknown.") in text
 
 
 def test_brief_drops_the_edit_ask_when_builder_and_scribe_are_off(project):
@@ -156,8 +172,7 @@ def test_brief_drops_the_edit_ask_when_builder_and_scribe_are_off(project):
     text = brief(project)
     assert "production code" not in text
     assert "tracking record" not in text
-    assert re.search(r"before this session\s+dispatches a built-in agent", text)
-    assert "unbounded Read" in text
+    assert "This project's guard also" not in text
 
 
 def test_brief_drops_the_edit_ask_when_builder_is_off_without_bookkeeping(project):
@@ -165,7 +180,7 @@ def test_brief_drops_the_edit_ask_when_builder_is_off_without_bookkeeping(projec
     cfg["bookkeeping"] = {"enabled": False}
     cfg["roles"] = {"builder": {"enabled": False}}
     write_config(project, cfg)
-    assert re.search(r"before this session\s+dispatches a built-in agent", brief(project))
+    assert "This project's guard also" not in brief(project)
 
 
 # --- discovery counter ---
@@ -397,12 +412,13 @@ def test_a_reported_role_is_still_recorded_verbatim(project):
     assert rows[0]["agent_type"] == "route:scout"
 
 
-# --- review gate at Stop ---
+# --- review reminder on the main session's first production write of a round ---
+# It used to block the first Stop. It is a reminder now: nothing here may block.
 
 def wrote(project, rel, agent_type=""):
-    run_observe({"hook_event_name": "PostToolUse", "tool_name": "Edit",
-                 "agent_type": agent_type, "session_id": "t1",
-                 "tool_input": {"file_path": str(project / rel)}}, project)
+    return run_observe({"hook_event_name": "PostToolUse", "tool_name": "Edit",
+                        "agent_type": agent_type, "session_id": "t1",
+                        "tool_input": {"file_path": str(project / rel)}}, project)
 
 
 def stop(project, active=False):
@@ -410,86 +426,148 @@ def stop(project, active=False):
                         "stop_hook_active": active}, project)
 
 
-def test_stop_is_blocked_after_an_unreviewed_production_write(project):
-    wrote(project, "src/a.ts")
-    got = stop(project)
-    assert got["decision"] == "block"
-    assert "src/a.ts" in got["reason"]
-    assert "route:reviewer" in got["reason"]
+def test_the_first_main_write_of_a_round_gets_a_review_reminder(project):
+    got = wrote(project, "src/a.ts")
+    text = context(got)
+    assert "src/a.ts" in text
+    assert "route:reviewer" in text
+    assert "decision" not in got
 
 
-def test_a_reviewer_dispatch_clears_the_gate(project):
+def test_the_reminder_appears_once_per_round(project):
+    assert wrote(project, "src/a.ts")
+    assert not wrote(project, "src/b.ts")
+    assert not wrote(project, "src/a.ts")
+
+
+def test_a_reviewer_dispatch_starts_a_new_round(project):
     wrote(project, "src/a.ts")
     dispatch_return(project, "route:reviewer")
-    assert not stop(project)
+    assert "src/b.ts" in context(wrote(project, "src/b.ts"))
 
 
-def test_the_gate_blocks_once_then_lets_stop_through(project):
+def test_a_scout_dispatch_does_not_start_a_new_round(project):
     wrote(project, "src/a.ts")
-    assert stop(project)["decision"] == "block"
-    assert not stop(project)
+    dispatch_return(project, "route:scout")
+    assert not wrote(project, "src/b.ts")
 
 
-def test_stop_hook_active_is_never_blocked(project):
+def test_stop_never_blocks(project):
     wrote(project, "src/a.ts")
+    assert not stop(project)
     assert not stop(project, active=True)
 
 
-def test_a_test_file_write_does_not_arm_the_gate(project):
-    wrote(project, "src/a.test.ts")
-    assert not stop(project)
+def test_a_test_file_write_gets_no_reminder(project):
+    assert not wrote(project, "src/a.test.ts")
 
 
-def test_a_builder_write_arms_the_gate(project):
-    wrote(project, "src/a.ts", agent_type="route:builder")
-    assert stop(project)["decision"] == "block"
+def test_a_builder_write_opens_the_round_but_reminds_no_one(project):
+    """The reminder is for the main session; the builder-return nudge covers a builder's
+    round, so the main session's later write in that round adds nothing."""
+    assert not wrote(project, "src/a.ts", agent_type="route:builder")
+    assert not wrote(project, "src/b.ts")
 
 
-def test_the_gate_respects_review_policy_never(project):
+def test_the_reminder_respects_review_policy_never(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
     cfg["review"] = {"policy": "never"}
     write_config(project, cfg)
-    wrote(project, "src/a.ts")
-    assert not stop(project)
+    assert not wrote(project, "src/a.ts")
 
 
-def test_with_reviewer_off_the_gate_asks_for_a_self_review(project):
-    with_roles(project, reviewer=False)
-    wrote(project, "src/a.ts")
-    got = stop(project)
-    assert "review the diff yourself" in got["reason"]
-
-
-def test_a_worktree_write_arms_the_gate(project):
-    wrote(project, ".claude/worktrees/wt/src/a.ts")
-    assert "src/a.ts" in stop(project)["reason"]
-
-
-def test_a_notebook_write_arms_the_gate(project):
-    run_observe({"hook_event_name": "PostToolUse", "tool_name": "NotebookEdit",
-                 "agent_type": "", "session_id": "t1",
-                 "tool_input": {"notebook_path": str(project / "src/n.ipynb")}}, project)
-    assert stop(project)["decision"] == "block"
-
-
-def test_a_scout_dispatch_does_not_clear_the_gate(project):
-    wrote(project, "src/a.ts")
-    dispatch_return(project, "route:scout")
-    assert stop(project)["decision"] == "block"
-
-
-def test_the_gate_respects_review_nudge_false(project):
+def test_the_reminder_respects_review_nudge_false(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
     cfg["review"] = {"nudge": False}
     write_config(project, cfg)
-    wrote(project, "src/a.ts")
-    assert not stop(project)
+    assert not wrote(project, "src/a.ts")
 
 
-def test_a_passing_stop_does_not_carry_writes_into_the_next_turn(project):
-    wrote(project, "src/a.ts")
-    assert not stop(project, active=True)
-    assert not stop(project)
+def test_with_reviewer_off_the_reminder_asks_for_a_self_review(project):
+    with_roles(project, reviewer=False)
+    assert "review the diff yourself" in context(wrote(project, "src/a.ts"))
+
+
+def test_the_always_policy_is_explicit_in_the_reminder(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"policy": "always"}
+    write_config(project, cfg)
+    assert "`review.policy` is `always`" in context(wrote(project, "src/a.ts"))
+
+
+def test_the_reminder_lists_the_default_triggers(project):
+    text = context(wrote(project, "src/a.ts"))
+    for clause in ("lacks a test that failed before and passes now",
+                   "state that outlives the process",
+                   "an authorization or access-control decision",
+                   "a boundary another system depends on",
+                   "a calculation whose wrong answer is silent",
+                   "changes control flow, error handling, concurrency, retry, or timeout"):
+        assert clause in text
+    assert "builder reported a blocker" not in text, "this session wrote the change"
+
+
+def test_the_silent_triggers_get_a_firm_dispatch_instruction(project):
+    text = context(wrote(project, "src/a.ts"))
+    assert ("If this round touches state that outlives the process, an authorization or "
+            "access-control decision, a calculation whose wrong answer is silent, dispatch "
+            "`route:reviewer` with the diff before you finish") in text
+    assert "a green test only shows the test agreed with the code" in text
+    # the other triggers stay conditional
+    assert "Also dispatch it if any of these holds:" in text
+    assert "a boundary another system depends on" in text.split("Also dispatch it")[1]
+
+
+def test_only_the_configured_silent_triggers_are_firm(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"triggers": ["authorization", "boundary"]}
+    write_config(project, cfg)
+    text = context(wrote(project, "src/a.ts"))
+    assert "If this round touches an authorization or access-control decision, dispatch" in text
+    assert "outlives the process" not in text
+    assert "calculation" not in text
+
+
+def test_without_a_silent_trigger_the_reminder_stays_conditional(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"triggers": ["boundary", "control_flow"]}
+    write_config(project, cfg)
+    text = context(wrote(project, "src/a.ts"))
+    assert "before you finish" not in text
+    assert ("When this round is done, dispatch `route:reviewer` with the diff if any of "
+            "these holds:") in text
+
+
+def test_the_reminder_lists_only_the_configured_triggers(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"triggers": ["authorization", "boundary"]}
+    write_config(project, cfg)
+    text = context(wrote(project, "src/a.ts"))
+    assert "authorization or access-control" in text
+    assert "a boundary another system depends on" in text
+    assert "outlives the process" not in text
+
+
+def test_an_empty_trigger_list_is_reported_not_papered_over(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["review"] = {"triggers": []}
+    write_config(project, cfg)
+    text = context(wrote(project, "src/a.ts"))
+    assert "no automatic risk triggers are configured" in text
+    assert "if any of these holds" not in text
+
+
+def test_a_worktree_write_reminds_with_the_tree_relative_path(project):
+    text = context(wrote(project, ".claude/worktrees/wt/src/a.ts"))
+    assert "src/a.ts" in text
+    assert ".claude/worktrees" not in text
+
+
+def test_a_notebook_write_reminds(project):
+    got = run_observe({"hook_event_name": "PostToolUse", "tool_name": "NotebookEdit",
+                       "agent_type": "", "session_id": "t1",
+                       "tool_input": {"notebook_path": str(project / "src/n.ipynb")}}, project)
+    assert "src/n.ipynb" in context(got)
 
 
 def test_brief_names_the_threshold_from_the_environment(project):
@@ -506,5 +584,5 @@ def test_brief_drops_the_threshold_under_deny(env, guard, project):
     write_config(project, cfg)
     text = context(run_observe({"hook_event_name": "SessionStart", "session_id": "t1"},
                                project, env_extra=env))
-    assert "edits production code or a tracking record" in text
-    assert "tokens" not in text.split("edits production code")[1].split("\n")[0]
+    assert "guard also denies this session editing production code or a tracking record." in text
+    assert "tokens" not in text.split("guard also denies")[1].split("\n")[0]

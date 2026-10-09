@@ -129,7 +129,7 @@
       "properties": {
         "mainSeverity": {
           "type": "string",
-          "description": "What happens when the main session writes production code or a record. Does not apply to production code when roles.builder.enabled is false, or while the main context is under guard.builderAtK (except with deny, which always applies); does not apply to records when roles.scribe.enabled is false.",
+          "description": "What happens when the main session writes production code or a record. Default off: whether to delegate that work is the main session's call. ask or deny push it to builder or scribe. Does not apply to production code when roles.builder.enabled is false, or while the main context is under guard.builderAtK (except with deny, which always applies); does not apply to records when roles.scribe.enabled is false.",
           "enum": ["ask", "deny", "off"]
         },
         "builderAtK": {
@@ -139,13 +139,17 @@
         },
         "readKB": {
           "type": "integer",
-          "description": "Unbounded main-session Reads larger than this ask first. 0 disables the check.",
+          "description": "An unbounded main-session Read larger than this many KB gets a cost hint in context. It never blocks or asks. 0 disables the hint.",
           "minimum": 0
         },
         "scoutAt": {
           "type": "integer",
-          "description": "Main-session discovery calls before the scout nudge. 0 disables it.",
+          "description": "Main-session discovery calls before the scout hint. 0 disables it.",
           "minimum": 0
+        },
+        "builderNeedsSpec": {
+          "type": "boolean",
+          "description": "Default true. A `builder` dispatch must carry an inline brief (a `Files:` and a `Verify:` line) or the path of a spec file with a `## Files` section, and that list must name at least one path, or the guard denies the dispatch. The builder may then write only the files that list names (a path, a directory ending in /, or a glob). Set false to turn both checks off."
         },
         "bashWriteDetection": {
           "type": "boolean",
@@ -164,7 +168,7 @@
         },
         "nudge": {
           "type": "boolean",
-          "description": "Whether a returning builder dispatch injects the review-policy reminder."
+          "description": "Whether the review-policy reminders are injected: after a builder dispatch returns, and after the main session's first production-code write since the last reviewer dispatch. Reminders only; nothing blocks."
         },
         "triggers": {
           "type": "array",

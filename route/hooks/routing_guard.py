@@ -3,16 +3,18 @@
 
 Four jobs, selected by tool_name.
 
-  Read              — polices what gets pulled into the main session's context.
-                      Replaying context dominates a routed session's spend: a large
-                      file read once is re-billed on every remaining turn. Bounded
-                      reads (`limit` set) always pass.
+  Read              — tells the main session what a large unbounded read will cost
+                      (a hint, never a prompt: whether to read it here or hand it to
+                      scout is the main session's call). Bounded reads (`limit` set)
+                      pass silently.
   Agent|Task        — polices who gets dispatched. A role turned off in
                       `roles.<role>.enabled` is denied outright, and so is a
                       route role that would run on a tier other than
-                      `models.<role>`; the built-in discovery agents inherit
-                      the caller's model, so they do scout's job at the
-                      caller's price.
+                      `models.<role>`. The built-in discovery agents inherit the
+                      caller's model, so they do scout's job at the caller's price:
+                      that gets a hint, and the dispatch goes through. A `builder`
+                      dispatch must carry a brief or a spec (`guard.builderNeedsSpec`),
+                      and the builder may then write only the files that names.
   Write|Edit|...    — polices what a role may write, and rejects a future-dated
                       timestamp in a tracking record.
   Bash              — best-effort detection of writes that route around the file
@@ -22,6 +24,10 @@ Four jobs, selected by tool_name.
                       write scope, and allowed for the main session. This is a backstop,
                       not a gate: the real enforcement for a read-only role is not
                       giving it Bash at all.
+
+The main session decides what to delegate. By default (`guard.mainSeverity: off`) the
+guard does not ask about its production-code or tracking-record writes; `ask` or `deny`
+there is a project's choice to push that work to builder or scribe.
 
 Every hook payload carries `agent_type`, so one script polices both the main session
 and each subagent. Plugin subagents arrive namespaced ("route:builder"), which
@@ -54,17 +60,17 @@ from _config import (  # noqa: E402
 
 READ_ONLY_ROLES = {"scout", "reviewer"}
 
-READ_REASON = (
-    "Reading {name} ({kb}KB) into the main session's context re-bills it on every "
-    "remaining turn — context replay is most of a routed session's cost. Two cheaper "
-    "paths: dispatch `scout` with a specific question, or re-issue this Read with "
-    "`offset`/`limit` for just the part you need."
+READ_HINT = (
+    "{name} is {kb}KB, roughly {ktok}k tokens. Read whole, it stays in this context and "
+    "is re-billed on every later turn. Your call: keep it here if you will edit it or "
+    "need most of it; take a part with `offset`/`limit` or `grep` if you know where to "
+    "look; dispatch `route:scout` if you only need a fact, a count or a summary from it."
 )
 
-READ_REASON_NO_SCOUT = (
-    "Reading {name} ({kb}KB) into the main session's context re-bills it on every "
-    "remaining turn — context replay is most of a routed session's cost. Re-issue this "
-    "Read with `offset`/`limit` for just the part you need."
+READ_HINT_NO_SCOUT = (
+    "{name} is {kb}KB, roughly {ktok}k tokens. Read whole, it stays in this context and "
+    "is re-billed on every later turn. If you know where to look, take a part with "
+    "`offset`/`limit` or `grep`."
 )
 
 ARCHIVE_REASON = (
@@ -119,17 +125,17 @@ def frontmatter_model(role: str):
 DISCOVERY_AGENTS = {"explore", "plan", "general-purpose", "claude"}
 # An Agent call that names no type gets this one.
 DEFAULT_AGENT = "general-purpose"
-DISCOVERY_REASON = (
-    "`{name}` inherits this session's model, so it maps the codebase at or near the "
-    "highest rate in the system. `scout` is the same job on a cheap tier with a 40-line "
-    "output ceiling: dispatch it with a specific question instead. Confirm only if you "
-    "need a tool scout lacks."
+DISCOVERY_HINT = (
+    "`{name}` inherits this session's model, so it runs at or near the highest rate in "
+    "the system. `route:scout` is read-only discovery on a cheap tier with a 40-line "
+    "output ceiling. Use `{name}` when you need what scout lacks (Bash, writing, "
+    "planning); otherwise `route:scout` with one specific question costs less."
 )
 
-DISCOVERY_REASON_NO_SCOUT = (
-    "`{name}` inherits this session's model, so it maps the codebase at or near the "
-    "highest rate in the system. Confirm only if a built-in discovery agent is "
-    "genuinely required."
+DISCOVERY_HINT_NO_SCOUT = (
+    "`{name}` inherits this session's model, so it runs at or near the highest rate in "
+    "the system. Fine when the job needs it; for plain codebase mapping, reading the "
+    "files here with `grep` and `offset`/`limit` may cost less."
 )
 
 # Best-effort: does this shell command look like it writes to the filesystem?
@@ -340,6 +346,8 @@ CLASS_OWNER = {"prod": "builder", "record": "scribe"}
 
 # Set by main() from the payload: the main session's transcript, read for its context size.
 TRANSCRIPT = None
+AGENT_ID = None
+SESSION = None
 TAIL_BYTES = 512 * 1024
 
 
@@ -444,6 +452,16 @@ RULES = {
 ASK_CONTEXT = "The route guard asked the user to confirm this call. Its reason: {reason}"
 
 
+def hint(text: str) -> None:
+    """Allow the call and hand Claude `text`. No permission decision is given, so the
+    call goes through whatever the session's permission mode would do anyway."""
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "additionalContext": text,
+    }}))
+    sys.exit(0)
+
+
 def respond(decision: str, reason: str) -> None:
     out = {
         "hookEventName": "PreToolUse",
@@ -461,7 +479,7 @@ def respond(decision: str, reason: str) -> None:
 def main_severity(cfg) -> str:
     """-> the decision for a main-session write: 'deny', 'ask', or '' when turned off."""
     level = (os.environ.get("ROUTING_MAIN")
-             or cfg["guard"].get("mainSeverity") or "ask").lower()
+             or cfg["guard"].get("mainSeverity") or "off").lower()
     if level == "off":
         return ""
     return "deny" if level == "deny" else "ask"
@@ -547,7 +565,201 @@ def now_in_timezone(name: str):
     return datetime.datetime.now()
 
 
-def handle_dispatch(role, tool_input, cfg) -> None:
+# --- a builder works from a spec -------------------------------------------------------
+# The Files list is the builder's task-level contract. A dispatch with no brief and no
+# spec gives it nothing to follow, so it is denied; a dispatch that has one is recorded
+# here so the builder's own writes can be checked against the list. The hook payload of
+# a builder's tool call carries `agent_id` but the Agent call that created it does not,
+# so the first in-scope write binds the builder to the dispatch whose list names that file.
+BUILDER_SPEC_REASON = (
+    "A `builder` dispatch needs something to implement. Send an inline brief with a "
+    "`Files:` line (every file it may touch) and a `Verify:` line (the exact command), "
+    "or the path of a spec file with a `## Files` section — see Step 2 of the `route` "
+    "skill. Without one the builder would be designing, and it is not allowed to."
+)
+BUILDER_SCOPE_REASON = (
+    "{targets} is not in this task's Files list ({files}). The builder may change only "
+    "the files its brief or spec names. If the task cannot be done without {targets}, "
+    "stop and report the blocker; the caller decides whether to widen the list."
+)
+_BRIEF_HEADING_RE = re.compile(
+    r"^\s*[*_#>\-\s]*(Task|Contract|Files|Verify|Non-?goals?)\s*[*_]*\s*:", re.I)
+_FILES_LINE_RE = re.compile(r"^\s*[*_#>\-\s]*Files\s*[*_]*\s*:(.*)$", re.I)
+_VERIFY_LINE_RE = re.compile(r"^\s*[*_#>\-\s]*Verify\s*[*_]*\s*:\s*\S", re.I)
+_FILES_HEADING_RE = re.compile(r"^(#{1,6})\s*Files\b", re.I)
+_PATH_TOKEN_RE = re.compile(r"[^\s,;`'\"()\[\]<>|]+")
+SCOPE_TTL_S = 6 * 3600
+SPEC_READ_BYTES = 64 * 1024
+
+
+def _scope_tokens(text: str) -> list:
+    """-> the path-like tokens in a Files section: `src/a.ts`, `src/mod/`, `src/*.py`,
+    `src/a.ts:12-30` (the line range is dropped)."""
+    out = []
+    for raw in _PATH_TOKEN_RE.findall(text):
+        tok = raw.strip("*_:").lstrip("-").strip()
+        tok = re.sub(r":\d[\d,\-]*$", "", tok)
+        if tok.startswith("./"):
+            tok = tok[2:]
+        if tok and ("/" in tok or re.search(r"\.\w+$", tok)):
+            out.append(tok)
+    return out
+
+
+def _brief_files(prompt: str):
+    """-> (tokens, has_verify) from an inline brief; tokens is [] when there is no
+    `Files:` line."""
+    lines = prompt.splitlines()
+    tokens, has_verify, i = [], False, 0
+    while i < len(lines):
+        line = lines[i]
+        if _VERIFY_LINE_RE.match(line):
+            has_verify = True
+        m = _FILES_LINE_RE.match(line)
+        if m:
+            chunk = [m.group(1)]
+            i += 1
+            while i < len(lines) and not _BRIEF_HEADING_RE.match(lines[i]):
+                chunk.append(lines[i])
+                i += 1
+            tokens.extend(_scope_tokens("\n".join(chunk)))
+            continue
+        i += 1
+    return tokens, has_verify
+
+
+def _spec_files(prompt: str, project: str, cfg):
+    """-> the Files tokens of the first spec file the prompt points at, or None when it
+    points at none that can be read."""
+    for raw in _PATH_TOKEN_RE.findall(prompt):
+        tok = raw.strip("*_:.,")
+        if not tok or "." not in os.path.basename(tok):
+            continue
+        path = tok if os.path.isabs(tok) else os.path.join(project, tok)
+        if not os.path.isfile(path):
+            continue
+        rel = rel_path(path, project)
+        if rel is None or classify(rel, cfg) != "spec":
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                body = fh.read(SPEC_READ_BYTES)
+        except OSError:
+            continue
+        section, level = [], None
+        for line in body.splitlines():
+            h = _FILES_HEADING_RE.match(line)
+            if h and level is None:
+                level = len(h.group(1))
+                continue
+            if level is not None:
+                if re.match(r"^#{1,%d}\s" % level, line):
+                    break
+                section.append(line)
+        if level is None:
+            for line in body.splitlines():
+                m = _FILES_LINE_RE.match(line)
+                if m:
+                    section.append(m.group(1))
+        return _scope_tokens("\n".join(section))
+    return None
+
+
+def builder_spec(prompt: str, project: str, cfg):
+    """-> (ok, tokens): ok is whether the dispatch carries a brief (a Files list that
+    names at least one path, and a Verify line) or a spec file whose Files section does;
+    tokens is that list."""
+    spec = _spec_files(prompt, project, cfg)
+    if spec:
+        return True, spec
+    tokens, has_verify = _brief_files(prompt)
+    return (bool(tokens) and has_verify), tokens
+
+
+def _scope_path(project: str, session) -> str:
+    return os.path.join(project, ".claude", "routing", "state", "%s.bscope" % session)
+
+
+def _scope_load(path: str):
+    """-> (pending, bound): dispatches not yet claimed by a builder, and agent_id -> tokens."""
+    pushes, open_ids, bound = {}, [], {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            rows = [json.loads(l) for l in fh if l.strip()]
+    except (OSError, ValueError):
+        return [], {}
+    for row in rows:
+        if row.get("op") == "push":
+            pushes[row["id"]] = row
+            open_ids.append(row["id"])
+        elif row.get("op") == "bind" and row.get("id") in pushes:
+            # Two builders can claim one dispatch at once; both get its list.
+            bound[row["agent_id"]] = pushes[row["id"]]["tokens"]
+            if row["id"] in open_ids:
+                open_ids.remove(row["id"])
+    now = time.time()
+    pending = [pushes[i] for i in open_ids if now - pushes[i].get("ts", 0) < SCOPE_TTL_S]
+    return pending, bound
+
+
+def _scope_append(path: str, row: dict) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+
+def _in_scope(rel: str, tokens) -> bool:
+    rel = strip_worktree(rel)
+    for tok in tokens:
+        if tok == rel or (tok.endswith("/") and rel.startswith(tok)):
+            return True
+        if tok.startswith(rel.rstrip("/") + "/"):
+            return True  # `mkdir`/`rm -r` on a directory that holds a listed file
+        if "*" in tok and matches_any(rel, [tok]):
+            return True
+    return False
+
+
+def record_builder_dispatch(prompt, project, cfg, session) -> None:
+    ok, tokens = builder_spec(prompt, project, cfg)
+    if not ok:
+        respond("deny", "[routing/main] " + BUILDER_SPEC_REASON)
+    if tokens and session:
+        try:
+            _scope_append(_scope_path(project, session), {
+                "op": "push", "id": "%x" % int(time.time() * 1e6), "ts": time.time(),
+                "tokens": tokens})
+        except OSError:
+            pass  # no state, no enforcement: fail open
+
+
+def check_builder_scope(rels, project, cfg) -> None:
+    """Deny a builder write to a path its dispatch's Files list does not name."""
+    if not cfg["guard"].get("builderNeedsSpec", True) or not AGENT_ID or not SESSION:
+        return
+    try:
+        path = _scope_path(project, SESSION)
+        pending, bound = _scope_load(path)
+        if AGENT_ID in bound:
+            tokens = bound[AGENT_ID]
+        else:
+            pick = next((p for p in pending if all(_in_scope(r, p["tokens"]) for r in rels)),
+                        None)
+            if pick is not None:
+                _scope_append(path, {"op": "bind", "id": pick["id"], "agent_id": AGENT_ID})
+                return
+            if not pending:
+                return  # nothing recorded for this builder: the role-level scope still applies
+            tokens = pending[0]["tokens"]
+        bad = [r for r in rels if not _in_scope(r, tokens)]
+    except (OSError, ValueError, KeyError):
+        return
+    if bad:
+        respond("deny", "[routing/builder] " + BUILDER_SCOPE_REASON.format(
+            targets=", ".join(sorted(set(bad))[:3]), files=", ".join(tokens[:8])))
+
+
+def handle_dispatch(role, tool_input, cfg, project) -> None:
     spawned = (tool_input.get("subagent_type") or "").strip()
     spawned_role = route_role(spawned)
     # A disabled role is a deny, not an ask: confirming cannot supply what is missing,
@@ -565,11 +777,13 @@ def handle_dispatch(role, tool_input, cfg) -> None:
                       else "no `model` parameter, so the agent file's default")
             respond("deny", "[routing/%s] " % role + MODEL_REASON.format(
                 role=spawned_role, want=want, got=got, source=source))
+    if spawned_role == "builder" and cfg["guard"].get("builderNeedsSpec", True):
+        record_builder_dispatch(tool_input.get("prompt") or "", project, cfg, SESSION)
     name = spawned or DEFAULT_AGENT
     if name.lower() in DISCOVERY_AGENTS:
-        template = (DISCOVERY_REASON if role_enabled(cfg, "scout")
-                    else DISCOVERY_REASON_NO_SCOUT)
-        respond("ask", "[routing/%s] " % role + template.format(name=name))
+        template = (DISCOVERY_HINT if role_enabled(cfg, "scout")
+                    else DISCOVERY_HINT_NO_SCOUT)
+        hint("[routing/%s] " % role + template.format(name=name))
     sys.exit(0)
 
 
@@ -598,10 +812,11 @@ def handle_read(role, tool_input, project, cfg) -> None:
     except OSError:
         sys.exit(0)
     if size > limit_kb * 1024:
-        template = (READ_REASON if role_enabled(cfg, "scout")
-                    else READ_REASON_NO_SCOUT)
-        respond("ask", "[routing/main] " + template.format(
-            name=os.path.basename(target), kb=size // 1024))
+        template = (READ_HINT if role_enabled(cfg, "scout")
+                    else READ_HINT_NO_SCOUT)
+        hint("[routing/main] " + template.format(
+            name=os.path.basename(target), kb=size // 1024,
+            ktok=max(1, size // 4000)))
     sys.exit(0)
 
 
@@ -666,6 +881,8 @@ def handle_builder_bash(command, project, cfg) -> None:
     if outside:
         respond("deny", "[routing/builder] " + BUILDER_BASH_OUT_OF_SCOPE_REASON.format(
             targets=", ".join(sorted(set(outside))[:3])))
+    inside = [rel_path(t, project) for t in targets]
+    check_builder_scope([r for r in inside if r is not None], project, cfg)
     sys.exit(0)
 
 
@@ -722,6 +939,8 @@ def handle_write(role, tool_input, project, cfg) -> None:
             "Builder may write production-code paths only; the spec's Files list is "
             "the remaining task-level scope.")
         respond("deny", "[routing/builder] " + reason)
+    if role == "builder":
+        check_builder_scope([rel], project, cfg)
 
     if cls == "record":
         body = tool_input.get("new_string") or tool_input.get("content") or ""
@@ -757,8 +976,10 @@ def main() -> None:
     except Exception:
         sys.exit(0)  # never break the session on a malformed payload
 
-    global TRANSCRIPT
+    global TRANSCRIPT, AGENT_ID, SESSION
     TRANSCRIPT = payload.get("transcript_path")
+    AGENT_ID = payload.get("agent_id")
+    SESSION = payload.get("session_id")
     role = normalize_role(payload.get("agent_type"))
     tool_input = payload.get("tool_input") or {}
     tool = payload.get("tool_name")
@@ -766,7 +987,7 @@ def main() -> None:
     cfg = load_config(project)
 
     if tool in ("Agent", "Task"):
-        handle_dispatch(role, tool_input, cfg)
+        handle_dispatch(role, tool_input, cfg, project)
     if tool == "Read":
         handle_read(role, tool_input, project, cfg)
     if tool == "Bash":

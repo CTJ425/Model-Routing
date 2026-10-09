@@ -52,8 +52,8 @@ DEFAULTS = {
         "specs": "docs/agent/specs",
     },
     "models": {
-        "scout": "haiku", "builder": "opus",
-        "reviewer": "opus", "scribe": "haiku",
+        "scout": "haiku", "builder": "sonnet",
+        "reviewer": "sonnet", "scribe": "haiku",
     },
     "bookkeeping": {
         "enabled": True,
@@ -70,12 +70,14 @@ DEFAULTS = {
     },
     "language": {"artifacts": "en"},
     "guard": {
-        "mainSeverity": "ask",
+        "mainSeverity": "off",
         "readKB": 32,
         # Main-session context (thousand tokens) below which the main session may write
         # production code with no ask. 0 = always ask. See routing_guard.builder_at.
         "builderAtK": 60,
         "scoutAt": 12,
+        # builder runs only on a brief or spec, and writes only the files it lists.
+        "builderNeedsSpec": True,
         "bashWriteDetection": True,
     },
     "scout": {"enabled": True},

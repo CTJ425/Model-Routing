@@ -9,7 +9,7 @@ import json
 import pytest
 
 from conftest import BASE_CONFIG, write_config
-from helpers import decision, reason, run_guard
+from helpers import decision, hint_text, reason, run_guard
 from _config import rel_path, route_role
 
 
@@ -151,30 +151,38 @@ def test_archive_denial_points_at_the_bounded_read(project):
     assert "limit" in text, text
 
 
-def test_main_large_unbounded_read_asks(project):
+def test_main_large_unbounded_read_gets_a_hint_and_goes_through(project):
     big = project / "big.md"
     big.write_text("x" * 40 * 1024)
-    assert decision(read("main", str(big), project)) == "ask"
-    assert decision(read("main", str(big), project, limit=100)) is None
+    got = read("main", str(big), project)
+    assert decision(got) is None
+    text = hint_text(got)
+    assert "big.md" in text and "40KB" in text and "route:scout" in text
+    assert read("main", str(big), project, limit=100) is None
 
 
-def test_read_reason_drops_scout_when_disabled(project):
+def test_a_read_below_the_threshold_gets_no_hint(project):
+    small = project / "small.md"
+    small.write_text("x" * 1024)
+    assert read("main", str(small), project) is None
+
+
+def test_read_hint_drops_scout_when_disabled(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
     cfg["scout"] = {"enabled": False}
     write_config(project, cfg)
     big = project / "big.md"
     big.write_text("x" * 40 * 1024)
     got = read("main", str(big), project)
-    assert decision(got) == "ask"
-    assert "scout" not in reason(got)
+    assert decision(got) is None
+    assert "big.md" in hint_text(got)
+    assert "scout" not in hint_text(got)
 
 
 # --- an ask's reason is shown to the user only, but it is written for Claude ---
 
 def test_ask_hands_its_reason_to_claude(project):
-    big = project / "big.md"
-    big.write_text("x" * 40 * 1024)
-    got = read("main", str(big), project)
+    got = write("main", "src/a.ts", project)
     assert decision(got) == "ask"
     assert reason(got) in got["hookSpecificOutput"].get("additionalContext", "")
 
@@ -223,34 +231,41 @@ def test_records_become_plain_docs_when_bookkeeping_is_off(project):
 # --- dispatch ---
 
 @pytest.mark.parametrize("spawned,want", [
-    ("Explore", "ask"),
-    ("general-purpose", "ask"),
-    ("Plan", "ask"),
-    ("claude", "ask"),         # built-in catch-all: no model of its own
+    ("Explore", "hint"),
+    ("general-purpose", "hint"),
+    ("Plan", "hint"),
+    ("claude", "hint"),        # built-in catch-all: no model of its own
     ("fork", None),            # left out: fork mode spawns these routinely
-    ("", "ask"),               # no type given: Claude Code runs general-purpose
+    ("", "hint"),              # no type given: Claude Code runs general-purpose
     ("route:scout", None),
     ("other:claude", None),    # a plugin agent declares its own model
     ("claude-code-guide", None),
 ])
 def test_discovery_dispatch(spawned, want, project):
+    """A built-in agent on the caller's model gets a cost hint and goes through: it is
+    the main session's call, so the guard sets no permission decision at all."""
     got = run_guard({"tool_name": "Agent", "agent_type": "",
                      "tool_input": {"subagent_type": spawned}}, project)
-    assert decision(got) == want
+    assert decision(got) is None
+    assert bool(hint_text(got)) == (want == "hint")
 
 
 def test_untyped_dispatch_is_named_as_general_purpose(project):
     got = run_guard({"tool_name": "Agent", "agent_type": "",
                      "tool_input": {"prompt": "look around"}}, project)
-    assert decision(got) == "ask"
-    assert "`general-purpose`" in reason(got)
+    assert decision(got) is None
+    assert "`general-purpose`" in hint_text(got)
 
 
 # --- roles.<role>.enabled: a role turned off is denied, not merely discouraged ---
 
+BRIEF = ("Task: ?-t\nContract: change a constant\nFiles: src/a.ts\n"
+         "Verify: npm test\nNon-goals: none")
+
+
 def dispatch(spawned, project, caller=""):
     return run_guard({"tool_name": "Agent", "agent_type": caller,
-                      "tool_input": {"subagent_type": spawned}}, project)
+                      "tool_input": {"subagent_type": spawned, "prompt": BRIEF}}, project)
 
 
 def with_roles(project, **enabled):
@@ -282,7 +297,7 @@ def test_every_role_is_enabled_by_default(project):
 
 
 def dispatch_with_model(spawned, model, project):
-    tool_input = {"subagent_type": spawned}
+    tool_input = {"subagent_type": spawned, "prompt": BRIEF}
     if model is not None:
         tool_input["model"] = model
     return run_guard({"tool_name": "Agent", "agent_type": "", "tool_input": tool_input},
@@ -303,8 +318,8 @@ def test_dispatch_on_a_tier_other_than_the_config_is_denied(project):
 
 
 def test_dispatch_without_model_is_denied_when_the_default_tier_differs(project):
-    """The agent file says opus; a config pinned to sonnet needs the parameter."""
-    with_models(project, builder="sonnet")
+    """The agent file says sonnet; a config pinned to opus needs the parameter."""
+    with_models(project, builder="opus")
     got = dispatch_with_model("route:builder", None, project)
     assert decision(got) == "deny"
     assert "no `model` parameter" in reason(got)
@@ -315,8 +330,8 @@ def test_dispatch_without_model_passes_when_the_default_tier_matches(project):
 
 
 def test_dispatch_with_the_configured_model_passes(project):
-    with_models(project, builder="sonnet")
-    assert decision(dispatch_with_model("route:builder", "sonnet", project)) is None
+    with_models(project, builder="opus")
+    assert decision(dispatch_with_model("route:builder", "opus", project)) is None
 
 
 def test_model_check_ignores_a_config_value_that_is_not_an_alias(project):
@@ -327,7 +342,8 @@ def test_model_check_ignores_a_config_value_that_is_not_an_alias(project):
 def test_model_check_is_off_when_the_harness_forces_one_model(project):
     with_models(project, builder="sonnet")
     got = run_guard({"tool_name": "Agent", "agent_type": "",
-                     "tool_input": {"subagent_type": "route:builder", "model": "opus"}},
+                     "tool_input": {"subagent_type": "route:builder", "model": "opus",
+                                    "prompt": BRIEF}},
                     project, env_extra={"CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1"})
     assert decision(got) is None
 
@@ -396,14 +412,21 @@ def test_route_role(raw, want):
     assert route_role(raw) == want
 
 
-def test_discovery_reason_drops_scout_when_disabled(project):
+def test_discovery_hint_drops_scout_when_disabled(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
     cfg["scout"] = {"enabled": False}
     write_config(project, cfg)
     got = run_guard({"tool_name": "Agent", "agent_type": "",
                      "tool_input": {"subagent_type": "Explore"}}, project)
-    assert decision(got) == "ask"
-    assert "scout" not in reason(got)
+    assert decision(got) is None
+    assert "`Explore`" in hint_text(got)
+    assert "scout" not in hint_text(got)
+
+
+def test_a_dispatch_hint_from_a_subagent_is_attributed_to_it(project):
+    got = run_guard({"tool_name": "Agent", "agent_type": "route:builder",
+                     "tool_input": {"subagent_type": "Explore"}}, project)
+    assert hint_text(got).startswith("[routing/builder]")
 
 
 # --- a role turned off leaves its work to the main session, with no ask about it ---
@@ -916,14 +939,14 @@ def test_a_large_main_context_asks_and_names_its_size(project):
 
 def test_the_threshold_is_configurable(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
-    cfg["guard"] = {"builderAtK": 100}
+    cfg["guard"].update(builderAtK=100)
     write_config(project, cfg)
     assert decision(main_write(project, 90000)) is None
 
 
 def test_a_zero_threshold_always_asks(project):
     cfg = json.loads(json.dumps(BASE_CONFIG))
-    cfg["guard"] = {"builderAtK": 0}
+    cfg["guard"].update(builderAtK=0)
     write_config(project, cfg)
     assert decision(main_write(project, 1000)) == "ask"
 
@@ -969,3 +992,181 @@ def test_context_skips_sidechain_synthetic_and_zero_rows(project):
                      "tool_input": {"file_path": "src/a.ts", "content": "x"}}, project)
     assert decision(got) == "ask"
     assert "about 90k tokens" in reason(got)
+
+
+# --- the default: the main session decides what to delegate ---
+
+def without_guard_block(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    del cfg["guard"]
+    write_config(project, cfg)
+
+
+def test_main_severity_defaults_to_off(project):
+    """No `guard` block: neither production code nor a record is asked about, at any
+    context size and through the shell as well."""
+    without_guard_block(project)
+    assert main_write(project, 90000) is None
+    assert decision(write("main", "src/a.ts", project)) is None  # context unknown
+    assert write("main", "docs/agent/TASK.md", project) is None
+    assert main_write(project, 90000, cmd="sed -i 's/a/b/' src/a.ts") is None
+
+
+def test_the_default_still_holds_every_subagent_boundary(project):
+    without_guard_block(project)
+    assert decision(write("route:builder", "tests/a.test.ts", project)) == "deny"
+    assert decision(write("route:builder", "docs/agent/TASK.md", project)) == "deny"
+    assert decision(write("route:scribe", "src/a.ts", project)) == "deny"
+    assert decision(write("route:scout", "src/a.ts", project)) == "deny"
+    assert decision(write("route:reviewer", "src/a.ts", project)) == "deny"
+
+
+def test_a_project_can_still_opt_back_in_to_asking(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["guard"] = {"mainSeverity": "ask", "builderAtK": 0}
+    write_config(project, cfg)
+    assert decision(write("main", "src/a.ts", project)) == "ask"
+
+
+def test_hints_set_no_permission_decision(project):
+    """A hint must not answer the permission question for the user's own settings."""
+    got = run_guard({"tool_name": "Agent", "agent_type": "",
+                     "tool_input": {"subagent_type": "Explore"}}, project)
+    out = got["hookSpecificOutput"]
+    assert "permissionDecision" not in out
+    assert out["additionalContext"]
+
+
+# --- a builder works from a spec, and writes only the files it lists ---
+
+def dispatch_builder(project, prompt=BRIEF, session="s1"):
+    return run_guard({"tool_name": "Agent", "agent_type": "", "session_id": session,
+                      "tool_input": {"subagent_type": "route:builder", "prompt": prompt}},
+                     project)
+
+
+def builder_write(project, path, agent_id="a1", session="s1", tool="Write"):
+    return run_guard({"tool_name": tool, "agent_type": "route:builder", "session_id": session,
+                      "agent_id": agent_id, "tool_input": {"file_path": path}}, project)
+
+
+def builder_bash(project, command, agent_id="a1", session="s1"):
+    return run_guard({"tool_name": "Bash", "agent_type": "route:builder",
+                      "session_id": session, "agent_id": agent_id,
+                      "tool_input": {"command": command}}, project)
+
+
+def brief_with(files, verify="Verify: npm test"):
+    return "Task: ?-t\nContract: x\nFiles: %s\n%s\nNon-goals: none" % (files, verify)
+
+
+@pytest.mark.parametrize("prompt", [
+    "add a loyalty discount to billing",
+    "Task: ?-t\nContract: x\nFiles: src/a.ts\nNon-goals: none",          # no Verify
+    "Task: ?-t\nContract: x\nVerify: npm test\nNon-goals: none",           # no Files
+    "Task: ?-t\nFiles: the billing module\nVerify: npm test",              # no path in Files
+    "Spec: docs/agent/specs/missing.md",                                    # no such spec
+    "",
+])
+def test_a_builder_dispatch_without_a_brief_or_spec_is_denied(prompt, project):
+    got = dispatch_builder(project, prompt)
+    assert decision(got) == "deny"
+    assert "`Files:`" in reason(got) and "`Verify:`" in reason(got)
+
+
+def test_a_builder_dispatch_with_a_brief_goes_through(project):
+    assert decision(dispatch_builder(project)) is None
+
+
+def test_a_builder_dispatch_with_a_spec_file_goes_through(project):
+    spec = project / "docs" / "agent" / "specs" / "t.md"
+    spec.parent.mkdir(parents=True, exist_ok=True)
+    spec.write_text("# T\n\n## Contract\nx\n\n## Files\n- `src/a.ts` (new)\n- src/b.ts:10-30\n"
+                    "\n## Verify\nnpm test\n")
+    assert decision(dispatch_builder(project, "Spec: docs/agent/specs/t.md")) is None
+    assert decision(builder_write(project, "src/a.ts")) is None
+    assert decision(builder_write(project, "src/b.ts")) is None
+    assert decision(builder_write(project, "src/c.ts")) == "deny"
+
+
+def test_a_spec_without_a_files_section_is_not_a_spec(project):
+    spec = project / "docs" / "agent" / "specs" / "t.md"
+    spec.parent.mkdir(parents=True, exist_ok=True)
+    spec.write_text("# T\n\n## Contract\nmake it better\n")
+    assert decision(dispatch_builder(project, "Spec: docs/agent/specs/t.md")) == "deny"
+
+
+def test_a_builder_may_write_only_the_files_its_brief_names(project):
+    dispatch_builder(project, brief_with("src/a.ts, src/b.ts"))
+    assert decision(builder_write(project, "src/a.ts")) is None
+    got = builder_write(project, "src/c.ts")
+    assert decision(got) == "deny"
+    assert "src/c.ts" in reason(got) and "src/a.ts" in reason(got)
+    assert decision(builder_write(project, "src/b.ts", tool="Edit")) is None
+
+
+def test_the_first_write_decides_which_dispatch_a_builder_belongs_to(project):
+    """Two builders, disjoint lists: neither may cross into the other's files."""
+    dispatch_builder(project, brief_with("src/a.ts"))
+    dispatch_builder(project, brief_with("src/b.ts"))
+    assert decision(builder_write(project, "src/b.ts", agent_id="b2")) is None
+    assert decision(builder_write(project, "src/a.ts", agent_id="a1")) is None
+    assert decision(builder_write(project, "src/a.ts", agent_id="b2")) == "deny"
+    assert decision(builder_write(project, "src/b.ts", agent_id="a1")) == "deny"
+
+
+def test_a_directory_and_a_glob_in_files_cover_what_is_under_them(project):
+    dispatch_builder(project, brief_with("src/mod/ src/util/*.ts"))
+    assert decision(builder_write(project, "src/mod/deep/x.ts")) is None
+    assert decision(builder_write(project, "src/util/u.ts")) is None
+    assert decision(builder_write(project, "src/other/x.ts")) == "deny"
+
+
+def test_a_multiline_files_list_is_read_to_the_next_heading(project):
+    dispatch_builder(project, "Task: ?-t\nFiles:\n  - src/a.ts\n  - src/b.ts\n"
+                              "Verify: npm test\nNon-goals: none")
+    assert decision(builder_write(project, "src/b.ts")) is None
+    assert decision(builder_write(project, "src/c.ts")) == "deny"
+
+
+def test_a_worktree_write_is_checked_by_its_tree_relative_path(project):
+    dispatch_builder(project, brief_with("src/a.ts"))
+    assert decision(builder_write(project, ".claude/worktrees/wt/src/a.ts")) is None
+    assert decision(builder_write(project, ".claude/worktrees/wt/src/z.ts")) == "deny"
+
+
+def test_builder_bash_writes_follow_the_same_list(project):
+    dispatch_builder(project, brief_with("src/newmod/a.ts"))
+    assert decision(builder_bash(project, "mkdir -p src/newmod")) is None
+    assert decision(builder_bash(project, "rm src/other.ts")) == "deny"
+
+
+def test_a_builder_with_no_recorded_dispatch_keeps_only_the_role_scope(project):
+    """State lost, or the dispatch predates the plugin: fail open, not closed."""
+    assert decision(builder_write(project, "src/anything.ts")) is None
+    assert decision(builder_write(project, "tests/a.test.ts")) == "deny"
+
+
+def test_the_role_scope_still_applies_inside_the_files_list(project):
+    dispatch_builder(project, brief_with("src/a.ts, tests/a.test.ts"))
+    assert decision(builder_write(project, "tests/a.test.ts")) == "deny"
+
+
+def test_a_session_does_not_see_another_sessions_dispatches(project):
+    dispatch_builder(project, brief_with("src/a.ts"), session="s1")
+    assert decision(builder_write(project, "src/zzz.ts", session="s2")) is None
+
+
+def test_builder_needs_spec_false_turns_both_checks_off(project):
+    cfg = json.loads(json.dumps(BASE_CONFIG))
+    cfg["guard"]["builderNeedsSpec"] = False
+    write_config(project, cfg)
+    assert decision(dispatch_builder(project, "just do it")) is None
+    assert decision(builder_write(project, "src/anything.ts")) is None
+
+
+def test_other_roles_dispatch_without_a_brief(project):
+    got = run_guard({"tool_name": "Agent", "agent_type": "", "session_id": "s1",
+                     "tool_input": {"subagent_type": "route:scout", "prompt": "where is X"}},
+                    project)
+    assert decision(got) is None

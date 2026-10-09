@@ -12,9 +12,11 @@ sys.path.insert(0, os.path.join(
 BASE_CONFIG = {
     "version": 2,
     "paths": {"prod": ["src/"], "docs": "docs/agent", "specs": "docs/agent/specs"},
-    "models": {"scout": "haiku", "builder": "opus",
-               "reviewer": "opus", "scribe": "haiku"},
+    "models": {"scout": "haiku", "builder": "sonnet",
+               "reviewer": "sonnet", "scribe": "haiku"},
     "roles": {"builder": {"enabled": True}},
+    # The plugin default is `off`; most tests exercise the `ask` path, so they pin it.
+    "guard": {"mainSeverity": "ask"},
 }
 
 

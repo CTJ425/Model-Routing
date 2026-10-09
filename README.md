@@ -4,13 +4,13 @@
 
 | 角色 (Role) | 執行位置 | 預設模型與 Effort | 負責範疇 (Owns) | 絕對禁止 (Must Never) |
 |---|---|---|---|---|
-| **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 路由分級、順序排定、規格/簡報撰寫、結果裁決 | 撰寫生產程式碼、直接編輯追蹤記錄 |
-| **scout** | 子代理人 (Subagent) | `haiku` (low effort, 80 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
-| **builder** | 子代理人 (Subagent) | `opus` (medium effort, 240 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
-| **reviewer** | 子代理人 (Subagent) | `opus` (medium effort, 80 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
-| **scribe** | 子代理人 (Subagent) | `haiku` (low effort, 90 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
+| **Boss** | 主會話 (Main Thread) | 您的 Session 模型 | 自行判斷是否委派、委派給誰、何時委派；規格/簡報撰寫、結果裁決 | 無硬性禁止：是否親自寫碼或記帳由主會話自行決定（專案可用 `guard.mainSeverity` 改成詢問或禁止） |
+| **scout** | 子代理人 (Subagent) | `haiku` (medium effort, 80 turns) | 探索代碼拓撲、壓縮長日誌與堆疊追蹤 | 撰寫任何檔案、執行任何 Bash 指令 |
+| **builder** | 子代理人 (Subagent) | `sonnet` (medium effort, 240 turns) | 依據 Spec/Brief 實作代碼、執行驗證 | 變更測試檔案、修改 Spec、修改追蹤文檔 |
+| **reviewer** | 子代理人 (Subagent) | `sonnet` (xhigh effort, 80 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
+| **scribe** | 子代理人 (Subagent) | `haiku` (medium effort, 90 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
 
-角色權限邊界透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
+**是否委派由主會話自行判斷**，插件只提供角色清單、成本資訊與提示，不強制走流程。子代理人的權限邊界則透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
 
 ---
 
@@ -105,17 +105,17 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
    - **Lane 1 (邊界明確的功能/修復)**：已知模組內的常規修改。Boss 撰寫行內簡報（5 段式 Inline Brief）。
    - **Lane 2 (高風險/跨模組變更)**：複雜缺陷、狀態/資料庫變更、認證或 API 邊界。Boss 撰寫完整規格檔案（Spec）並先編寫失敗測試。
 
-2. **Step 1 — 程式碼拓撲繪製 (`scout` | Haiku 預設，Low Effort)**：
+2. **Step 1 — 程式碼拓撲繪製 (`scout` | Haiku 預設，Medium Effort)**：
    - 僅在目標區域尚未探索時分派。執行唯讀掃描，回傳約 40 行的結構化地圖摘要。
    - **預算規範**：預設上限 `maxTurns: 80`（不支援專案自訂覆寫）。每次分派請給予**單一明確問題**並在已知時提供行號範圍；若在單次提示中堆疊多個跨大檔案的問題，將耗盡 80 回合預算而無法回傳可用資訊。若預算不足，Scout 會遵循優雅降級協議，以 `NOT ANSWERED:` 明列未完部分，呼叫端可透過 `SendMessage` 恢復會話續問。
 
 3. **Step 2 — 規格與簡報撰寫 (`Boss` | Session 模型)**：
-   - 高階模型撰寫任務契約、完整 `Files` 異動檔案清單、精確的 `Verify` 驗證指令與 `Non-goals`（非目標）。Boss 絕對不直接編寫生產代碼。
+   - 高階模型撰寫任務契約、完整 `Files` 異動檔案清單、精確的 `Verify` 驗證指令與 `Non-goals`（非目標）。是否由 Boss 親自編寫生產代碼，由 Boss 依任務大小與 context 自行判斷。
 
-4. **Step 3 — 程式碼實作 (`builder` | Opus 預設，Medium Effort)**：
+4. **Step 3 — 程式碼實作 (`builder` | Sonnet 預設，Medium Effort)**：
    - 讀取 Spec/Brief，嚴格在指定的 `Files` 清單內實作變更，並照字面（Verbatim）原樣執行驗證指令與測試套件。
 
-5. **Step 4 — 審查與風險檢查 (`reviewer` | Opus 預設，Medium Effort)**：
+5. **Step 4 — 審查與風險檢查 (`reviewer` | Sonnet 預設，XHigh Effort)**：
    - 依據 `review.policy`（`always`、`risk` 或 `never`）觸發。Boss 以外部 Diff 形式提供變更內容，讓審查者直接閱讀 Diff 差異而非重新讀取全量檔案。
    - 評估 7 大風險觸發器（`no_red_green`、`persistent_state`、`authorization`、`boundary`、`silent_calculation`、`control_flow`、`builder_blocker`）以及 5 項常態檢查（Standing Checks）。只回報問題清單（`BLOCKER` / `RISK`），不提出具體修復方案。
 
@@ -125,10 +125,10 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
    - **FAIL (第 2 次)**：約 80% 機率為規格本身存在瑕疵。Boss 修正 Spec/Brief 後重啟實作。
    - **FAIL (第 3 次)**：終止自動化迴圈，升級交由人工工程師介入。
 
-7. **Step 6 — 成果記帳與審計存檔 (`scribe` | Haiku 預設，Low Effort)**：
+7. **Step 6 — 成果記帳與審計存檔 (`scribe` | Haiku 預設，Medium Effort)**：
    - 將已驗證的成果、測試統計、Lint 結果、審查結論與殘留風險以機械化方式追加至 `docs/agent/PROGRESS.md`、`TASK.md` 與 `BUG_FIX.md`，並依設定自動歸檔。
 
-> 💡 載入 `route` Skill（或直接開啟新功能/修復任務 — `SessionStart` Hook 會主動提示委派流程），系統將逐步引導您走過此迴圈。
+> 💡 上述 7 個階段是參考流程，不是必經步驟。`SessionStart` Hook 會在每個會話開頭告知主會話角色清單與成本模型；主會話可自行決定是否載入 `route` Skill、跳過任何階段、或完全不委派。載入 Skill 後，它會提供各階段的簡報格式與裁決規則。
 
 ---
 
@@ -147,8 +147,8 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
   },
   "models": {
     "scout": "haiku",
-    "builder": "opus",
-    "reviewer": "opus",
+    "builder": "sonnet",
+    "reviewer": "sonnet",
     "scribe": "haiku"
   },
   "roles": {
@@ -165,7 +165,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
     "policy": "risk"
   },
   "guard": {
-    "mainSeverity": "ask",
+    "mainSeverity": "off",
     "readKB": 64,
     "scoutAt": 2,
     "bashWriteDetection": true
@@ -177,15 +177,17 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 
 - `paths.prod`：生產代碼的相對路徑或 Glob 規則，Guard 會據此界定生產代碼範圍。
 - `paths.test`：測試檔案路徑規則，Guard 會嚴禁 `builder` 擅自修改此範圍。
-- `models.<role>`：針對此專案覆寫該角色的分派模型，由 Boss 以 Agent 工具的 `model` 參數帶入（此參數只接受模型別名，例如 `haiku`、`sonnet`、`opus`）。此設定僅作用於分派參數，不會修改插件本體檔案。Effort 只寫在 Agent frontmatter，無法依專案調整：`builder` 與 `reviewer` 預設 `medium`，所以把它們改回 `sonnet` 的專案，會以 medium（而非舊版的 xhigh／high）執行 Sonnet。別名由 Claude Code 解析，例如 2.1.280 的 `opus` 對應 `claude-opus-5-5`；以子代理人 transcript 內的 `message.model` 為準。Claude Code 2.1.251 起，此參數優先於 Agent frontmatter 與環境變數 `CLAUDE_CODE_SUBAGENT_MODEL`（後者只是沒有其他來源時的預設值）；只有再設定 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`（2.1.257 起）時，所有子代理人才會被強制改用 `CLAUDE_CODE_SUBAGENT_MODEL`（未設定則用主會話模型），此處設定隨之失效。2.1.251 以前的版本，`CLAUDE_CODE_SUBAGENT_MODEL` 本身就會蓋過此處設定。
-- `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（四個角色均可獨立關閉）。主會話修改生產代碼是否詢問，還取決於主會話目前的 context 大小：低於 `guard.builderAtK`（預設 60，單位千 token）時直接放行，由主會話實作；超過時依 `guard.mainSeverity` 詢問並建議派 builder。依據：實測（`docs/field-reports/2026-09-23-*`）顯示 context 約 2.6 萬的全新會話中，單派 builder 每個任務平均多花 $0.19–0.38；測試都通過，但有一個任務在全部角色關閉時留下兩個正式環境缺陷。長會話的平衡點（約 5.6 萬到 8.9 萬）是推算值，尚未實測。`guard.mainSeverity` 設為 `deny` 時不套用此規則。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。關閉 `builder` 時，主會話修改生產代碼不再詢問；關閉 `scribe` 時，主會話修改追蹤文檔不再詢問（時間戳檢查仍然生效）。
+- `models.<role>`：針對此專案覆寫該角色的分派模型，由 Boss 以 Agent 工具的 `model` 參數帶入（此參數只接受模型別名，例如 `haiku`、`sonnet`、`opus`）。此設定僅作用於分派參數，不會修改插件本體檔案。Effort 只寫在 Agent frontmatter，無法依專案調整：`scout`、`builder`、`scribe` 預設 `medium`，`reviewer` 預設 `xhigh`，所以把 `builder` 或 `reviewer` 改成其他模型的專案，仍會沿用這個 effort。別名由 Claude Code 解析，例如 2.1.280 的 `opus` 對應 `claude-opus-5-5`；以子代理人 transcript 內的 `message.model` 為準。Claude Code 2.1.251 起，此參數優先於 Agent frontmatter 與環境變數 `CLAUDE_CODE_SUBAGENT_MODEL`（後者只是沒有其他來源時的預設值）；只有再設定 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`（2.1.257 起）時，所有子代理人才會被強制改用 `CLAUDE_CODE_SUBAGENT_MODEL`（未設定則用主會話模型），此處設定隨之失效。2.1.251 以前的版本，`CLAUDE_CODE_SUBAGENT_MODEL` 本身就會蓋過此處設定。
+- `roles.<role>.enabled`：設為 `false` 可完全關閉特定角色（四個角色均可獨立關閉）。`guard.mainSeverity` 預設為 `off`，主會話修改生產代碼不會被詢問；專案若設為 `ask`，則還取決於主會話目前的 context 大小：低於 `guard.builderAtK`（預設 60，單位千 token）時直接放行，超過時詢問並建議派 builder。依據：實測（`docs/field-reports/2026-09-23-*`）顯示 context 約 2.6 萬的全新會話中，單派 builder 每個任務平均多花 $0.19–0.38；測試都通過，但有一個任務在全部角色關閉時留下兩個正式環境缺陷。長會話的平衡點（約 5.6 萬到 8.9 萬）是推算值，尚未實測。`guard.mainSeverity` 設為 `deny` 時不套用此規則。關閉後 Guard 會直接拒絕（Deny）該角色的分派，Session 簡報會將其從名單中移除，並由主會話接管該步驟工作。關閉 `builder` 時，主會話修改生產代碼不再詢問；關閉 `scribe` 時，主會話修改追蹤文檔不再詢問（時間戳檢查仍然生效）。
 - `bookkeeping.enabled`：設為 `false` 時僅啟用模型路由功能（不分派 `scribe`、不維護追蹤文檔、Guard 不套用記錄保護規則）。
 - `bookkeeping.timezone`：寫入記錄時間戳時所採用的 IANA 時區（如 `UTC` 或 `Asia/Taipei`）。
 - `review.policy`：審查觸發策略：`always`（每次實作後均審查）、`risk`（預設，僅在觸發風險時審查）、`never`（不審查，以測試作為唯一門檻）。
+- `review.nudge`：是否注入審查政策提醒（預設 `true`）：builder 回傳後一次，以及主會話在每輪審查之後第一次修改生產代碼時一次。只是提醒，不會阻擋；舊版會在尚未審查時擋下第一次 Stop，現已移除。
 - `review.triggers`：自訂風險觸發器清單（`no_red_green`、`persistent_state`、`authorization`、`boundary`、`silent_calculation`、`control_flow`、`builder_blocker`）。
-- `guard.mainSeverity`：當主會話嘗試直接修改生產代碼或追蹤文檔時的防護層級（`ask`、`deny`、`off`）。對應角色（生產代碼為 `builder`、追蹤文檔為 `scribe`）關閉時，此設定對該類寫入不生效。
-- `guard.readKB`：主會話未指定範圍讀取大檔案的警示上限（KB），超過時要求確認；`0` 為關閉。
+- `guard.mainSeverity`：當主會話嘗試直接修改生產代碼或追蹤文檔時的防護層級（`ask`、`deny`、`off`，預設 `off`：是否委派由主會話自行判斷；設為 `ask` 或 `deny` 則由專案決定把這類工作推給 builder／scribe）。對應角色（生產代碼為 `builder`、追蹤文檔為 `scribe`）關閉時，此設定對該類寫入不生效。
+- `guard.readKB`：主會話未指定範圍讀取大檔案的提示上限（KB），超過時在 context 附上成本提示並放行，不會詢問或阻擋；`0` 為關閉。
 - `guard.scoutAt`：主會話在手動搜尋檔案達到指定次數時，主動提示改用 `scout`；`0` 為關閉。
+- `guard.builderNeedsSpec`：預設 `true`。派遣 `builder` 時必須附上簡報（含列出至少一個路徑的 `Files:` 行與 `Verify:` 行）或帶有 `## Files` 區段的 Spec 檔路徑，否則 Guard 拒絕派遣；派遣後 `builder` 只能寫入該清單列出的檔案（單一檔案、以 `/` 結尾的目錄或 glob，Bash 寫入同樣受限）。找不到對應派遣記錄時不強制（Fail-open）。設為 `false` 則兩項檢查都關閉。
 - `guard.bashWriteDetection`：是否啟用 Bash 檔案寫入啟發式偵測（預設 `true`）。
 
 > 執行 `/route:init` 可建立初始配置檔；執行 `/route:config` 可檢視與互動式編輯。
@@ -212,7 +214,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 - **專案目錄之外的路徑**：解析結果位於專案根目錄外的路徑不受 Guard 判定與管制。
 - **非插件所屬的自定義 Agent**：未知的 `agent_type` 不會受到此處規則限制；本 Guard 專責管理路由插件所定義的角色。
 - **模型實際計費扣款**：Hooks 僅記錄分派與呼叫；實際費用請使用 `/route:audit` 進行對帳。
-- **Builder 的任務層級 `Files` 清單**：Guard 負責角色層級的路徑類別防護；Task 具體的檔案清單需由 Builder 嚴格自我約束與 Reviewer 進行審查。
+- **Builder 的任務層級 `Files` 清單**：Guard 會檢查派遣是否附有簡報／Spec，並限制 `builder` 只能寫入清單內的檔案（`guard.builderNeedsSpec`）。它只讀得懂路徑形式的清單：以自然語言描述的檔案範圍不算數，派遣會被拒絕。派遣與子代理人之間靠第一次寫入對應；多個 builder 並行時，檔案清單必須互不重疊，否則可能對應到另一個派遣的清單。清單內的改動是否符合 Spec，仍由 Reviewer 審查。
 
 ### Fail-open 設計與 Python 環境依賴
 
