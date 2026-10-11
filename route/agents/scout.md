@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Use before any planning or implementation work to map the parts of the codebase a task will touch. Also use to compress long test output, build logs, or stack traces into a short factual summary. Read-only.
+description: Maps the parts of the codebase a task will touch. Also use to compress long test output, build logs, or stack traces into a short factual summary. Read-only. Dispatch only after the user runs `/route:route` or asks for this agent by name.
 model: haiku
 effort: medium
 maxTurns: 80

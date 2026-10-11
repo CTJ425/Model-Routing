@@ -158,6 +158,7 @@ def test_main_large_unbounded_read_gets_a_hint_and_goes_through(project):
     assert decision(got) is None
     text = hint_text(got)
     assert "big.md" in text and "40KB" in text and "route:scout" in text
+    assert "/route:route" in text
     assert read("main", str(big), project, limit=100) is None
 
 
@@ -255,6 +256,7 @@ def test_untyped_dispatch_is_named_as_general_purpose(project):
                      "tool_input": {"prompt": "look around"}}, project)
     assert decision(got) is None
     assert "`general-purpose`" in hint_text(got)
+    assert "/route:route" in hint_text(got)
 
 
 # --- roles.<role>.enabled: a role turned off is denied, not merely discouraged ---

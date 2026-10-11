@@ -64,7 +64,8 @@ READ_HINT = (
     "{name} is {kb}KB, roughly {ktok}k tokens. Read whole, it stays in this context and "
     "is re-billed on every later turn. Your call: keep it here if you will edit it or "
     "need most of it; take a part with `offset`/`limit` or `grep` if you know where to "
-    "look; dispatch `route:scout` if you only need a fact, a count or a summary from it."
+    "look. If the user has run `/route:route` and you only need a fact, a count or a "
+    "summary from it, `route:scout` costs less."
 )
 
 READ_HINT_NO_SCOUT = (
@@ -128,8 +129,9 @@ DEFAULT_AGENT = "general-purpose"
 DISCOVERY_HINT = (
     "`{name}` inherits this session's model, so it runs at or near the highest rate in "
     "the system. `route:scout` is read-only discovery on a cheap tier with a 40-line "
-    "output ceiling. Use `{name}` when you need what scout lacks (Bash, writing, "
-    "planning); otherwise `route:scout` with one specific question costs less."
+    "output ceiling, available once the user runs `/route:route`. Use `{name}` when "
+    "you need what scout lacks (Bash, writing, planning); otherwise, after that "
+    "opt-in, `route:scout` with one specific question costs less."
 )
 
 DISCOVERY_HINT_NO_SCOUT = (

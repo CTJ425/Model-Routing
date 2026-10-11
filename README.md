@@ -10,7 +10,7 @@
 | **reviewer** | 子代理人 (Subagent) | `sonnet` (xhigh effort, 80 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
 | **scribe** | 子代理人 (Subagent) | `haiku` (medium effort, 90 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
 
-**是否委派由主會話自行判斷**，插件只提供角色清單、成本資訊與提示，不強制走流程。子代理人的權限邊界則透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
+**子代理人採手動啟用 (Opt-in)**：平常主會話自己做，不會派發 `route:*` 子代理人；需要時由使用者執行 `/route:route` 載入流程手冊，之後該會話內的派發才視為預先授權，派給誰、何時派仍由主會話判斷。插件只提供角色清單、成本資訊與提示，不強制走流程。子代理人的權限邊界則透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
 
 ---
 
@@ -128,7 +128,7 @@ CLI 會回覆 `Restart to apply changes`。**重啟前，當前會話仍在執�
 7. **Step 6 — 成果記帳與審計存檔 (`scribe` | Haiku 預設，Medium Effort)**：
    - 將已驗證的成果、測試統計、Lint 結果、審查結論與殘留風險以機械化方式追加至 `docs/agent/PROGRESS.md`、`TASK.md` 與 `BUG_FIX.md`，並依設定自動歸檔。
 
-> 💡 上述 7 個階段是參考流程，不是必經步驟。`SessionStart` Hook 會在每個會話開頭告知主會話角色清單與成本模型；主會話可自行決定是否載入 `route` Skill、跳過任何階段、或完全不委派。載入 Skill 後，它會提供各階段的簡報格式與裁決規則。
+> 💡 上述 7 個階段是參考流程，不是必經步驟。`route` Skill 設有 `disable-model-invocation: true`，模型不會自動載入，只能由使用者以 `/route:route` 啟動；啟動後它會提供各階段的簡報格式與裁決規則，主會話仍可跳過任何階段。`SessionStart` Hook 會在每個會話開頭告知主會話角色清單、成本模型與這條 opt-in 規則；大檔讀取、探索次數與首次寫入生產代碼的提示，在未啟用時只建議縮小讀取範圍或自行比對審查觸發條件，不會要求派發子代理人。
 
 ---
 

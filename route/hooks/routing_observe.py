@@ -107,8 +107,9 @@ def log_dispatch(payload, d: str) -> None:
                             ensure_ascii=False) + "\n")
 
 
-BRIEF_HEAD = """[routing] The `route` subagents are available in this project. Whether to
-delegate to them is your call; nothing here requires it.
+BRIEF_HEAD = """[routing] The `route` plugin is installed in this project. Its subagents are
+opt-in: dispatch them only after the user runs `/route:route` in this session or asks
+for one by name. Until then, do the work here; nothing here requires delegation.
 
 - **Where the cost is.** Context replay, not output: whatever enters this session's
   context is re-billed on every remaining turn. A subagent keeps bulk (a large file, a
@@ -117,10 +118,9 @@ delegate to them is your call; nothing here requires it.
   is cheaper done here.
 - **Roster.** This session plans, decides and adjudicates.{roster_clause}
   Per-role model tiers live in `.claude/route.config.json` (see `/route:config`).
-- **The `route` skill** is a playbook, not a procedure: lanes, the brief and spec
-  formats, the review triggers and the dispatch-floor arithmetic. Load it when you are
-  about to delegate a build, a review or a record and want those rules; skip it for
-  work you do here.
+- **`/route:route`** loads the playbook: lanes, the brief and spec formats, the review
+  triggers and the dispatch-floor arithmetic. Only the user can run it. If a task is
+  bulk reading or a large multi-file change, you may suggest it once; do not repeat.
 - **Hints, not gates.** A large unbounded read, or a built-in agent that runs on this
   session's model (`Explore`, `Plan`, `general-purpose`, `claude`), gets a cost hint
   in context and goes through. What each subagent may write is still enforced by the
@@ -146,8 +146,8 @@ def roster_clause(cfg, bookkeeping: bool) -> str:
         return (" No route role is available for dispatch, so this session does the "
                 "work itself.")
     return (
-        " %s.\n  Delegation is pre-authorized — dispatch without asking. Dispatch by "
-        "scoped name (%s)." % ("; ".join(ROSTER_CLAUSE[r] for r in live),
+        " %s.\n  Once the user opts in, dispatch without asking, by scoped name (%s)."
+        % ("; ".join(ROSTER_CLAUSE[r] for r in live),
                                ", ".join("`route:%s`" % r for r in live))
     )
 
@@ -339,9 +339,10 @@ def handle_discovery(payload, d: str) -> None:
         "additionalContext": (
             "[routing] %d discovery calls (Read/Grep/Glob) so far in the main session, "
             "billed at the highest rate in the system. If you are still mapping the "
-            "codebase, that is scout's job: dispatch `scout` with a specific question "
-            "and read its ~40-line answer instead. If you are past discovery, ignore "
-            "this." % n
+            "codebase and the user has run `/route:route`, that is scout's job: "
+            "dispatch `route:scout` with a specific question and read its ~40-line "
+            "answer instead. Without that opt-in, narrow the reads with `grep` and "
+            "`offset`/`limit`. If you are past discovery, ignore this." % n
         ),
     }}))
 
@@ -464,6 +465,11 @@ def review_hint(cfg, rel: str) -> str:
                    "per round.")
 
 
+REVIEW_OPT_IN = (" If the user has not run `/route:route` this session, `route:reviewer` "
+                 "is not dispatched: check the diff against the same triggers yourself, "
+                 "and suggest `/route:route` if one of them holds.")
+
+
 def handle_main_write(payload, rel: str) -> None:
     cfg = load_config(project_dir(payload))
     review = cfg.get("review") or {}
@@ -471,7 +477,8 @@ def handle_main_write(payload, rel: str) -> None:
         return
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PostToolUse",
-        "additionalContext": review_hint(cfg, rel),
+        "additionalContext": review_hint(cfg, rel) + (
+            REVIEW_OPT_IN if role_enabled(cfg, "reviewer") else ""),
     }}))
 
 

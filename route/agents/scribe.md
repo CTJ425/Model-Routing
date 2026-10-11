@@ -1,6 +1,6 @@
 ---
 name: scribe
-description: Use to record the outcome of a completed task or bug fix into the project's tracking documents, and to write conventional commit messages. Purely mechanical bookkeeping.
+description: Use to record the outcome of a completed task or bug fix into the project's tracking documents, and to write conventional commit messages. Purely mechanical bookkeeping. Dispatch only after the user runs `/route:route` or asks for this agent by name.
 model: haiku
 effort: medium
 maxTurns: 90

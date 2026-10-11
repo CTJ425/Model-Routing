@@ -1,6 +1,6 @@
 ---
 name: builder
-description: Use to implement a task that has either an inline brief or a written spec. Requires an exhaustive Files list and an exact Verify command. Returns a bounded implementation report and never changes tests, specs, or tracking records.
+description: Use to implement a task that has either an inline brief or a written spec. Requires an exhaustive Files list and an exact Verify command. Returns a bounded implementation report and never changes tests, specs, or tracking records. Dispatch only after the user runs `/route:route` or asks for this agent by name.
 model: sonnet
 effort: medium
 maxTurns: 240

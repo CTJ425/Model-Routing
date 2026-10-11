@@ -5,7 +5,7 @@ import re
 import pytest
 
 from conftest import BASE_CONFIG, write_config
-from helpers import run_observe
+from helpers import PLUGIN, run_observe
 from _config import normalize_role
 
 
@@ -57,15 +57,33 @@ def test_brief_drops_bookkeeping_language_when_disabled(project):
 
 def test_brief_leaves_delegation_to_the_session(project):
     text = brief(project)
-    assert "is your call" in text
-    assert "nothing here requires it" in text
+    assert "nothing here requires delegation" in text
     assert "Hints, not gates" in text
-    assert "playbook, not a procedure" in text
+
+
+def test_brief_makes_the_route_agents_opt_in(project):
+    """The user opts in with /route:route; until then the session works here."""
+    text = brief(project)
+    assert "dispatch them only after the user runs `/route:route`" in text
+    assert "Only the user can run it" in text
+    assert "pre-authorized" not in text
+
+
+def test_the_playbook_and_the_agents_wait_for_the_user():
+    """The brief's opt-in rule only holds if the skill cannot load itself and every
+    agent description repeats the rule where the dispatching model reads it."""
+    import os
+    with open(os.path.join(PLUGIN, "skills", "route", "SKILL.md"), encoding="utf-8") as fh:
+        assert "\ndisable-model-invocation: true" in fh.read().split("\n---", 1)[0]
+    for role in ("scout", "builder", "reviewer", "scribe"):
+        with open(os.path.join(PLUGIN, "agents", role + ".md"), encoding="utf-8") as fh:
+            head = fh.read().split("\n---", 1)[0]
+        assert "after the user runs `/route:route`" in head, role
 
 
 def test_brief_no_longer_orders_the_skill_or_threatens_a_prompt(project):
     text = brief(project)
-    assert "load the" not in text.split("**The `route` skill**")[0]
+    assert "load the" not in text.split("**`/route:route`**")[0]
     assert "state the lane" not in text.lower()
     assert "Guards will ask" not in text
 
@@ -195,6 +213,14 @@ def test_discovery_nudge_fires_at_the_threshold(project):
     for _ in range(11):
         assert discovery(project) is None
     assert "12 discovery calls" in discovery(project)
+
+
+def test_discovery_nudge_sends_to_scout_only_after_the_opt_in(project):
+    for _ in range(11):
+        discovery(project)
+    text = discovery(project)
+    assert "the user has run `/route:route`" in text
+    assert "Without that opt-in" in text
 
 
 def test_subagent_discovery_is_not_counted(project):
@@ -432,6 +458,12 @@ def test_the_first_main_write_of_a_round_gets_a_review_reminder(project):
     assert "src/a.ts" in text
     assert "route:reviewer" in text
     assert "decision" not in got
+
+
+def test_the_reminder_falls_back_to_self_review_without_the_opt_in(project):
+    text = context(wrote(project, "src/a.ts"))
+    assert "has not run `/route:route`" in text
+    assert "check the diff against the same triggers yourself" in text
 
 
 def test_the_reminder_appears_once_per_round(project):

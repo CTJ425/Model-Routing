@@ -1,6 +1,7 @@
 ---
 name: route
-description: Playbook for handing work to the route subagents — scout (map and compress), builder (implement), reviewer (check risk), scribe (record) — each at its own model tier. Delegation is optional and the main session decides. Load it when you are about to delegate a build, a review or a record and want the lane, brief, review and adjudication rules, when a task is bulk reading or a large multi-file change you may want to keep out of your own context, or when the user says "route this", "run the next task", or asks why everything is running on the most expensive model.
+description: Playbook for handing work to the route subagents — scout (map and compress), builder (implement), reviewer (check risk), scribe (record) — each at its own model tier. The user runs it as /route:route when they want a task routed; running it opts this session into dispatching the route agents.
+disable-model-invocation: true
 ---
 
 # Routing playbook
@@ -14,8 +15,9 @@ justification a skipped dispatch needs.
 You are the Boss: the main session holds the plan and spends as few of its own tokens as
 it sensibly can. Verbose work is a candidate for a subagent and comes back small.
 
-Delegation here is **pre-authorized** — dispatching these agents is allowed without
-asking the user each time.
+The user loaded this playbook with `/route:route`, which is their opt-in: for the rest of
+this session, dispatching these agents is **pre-authorized** and needs no further asking.
+Without that opt-in the route agents are not dispatched at all.
 
 ## Step 0 — pick a lane, when you route
 
