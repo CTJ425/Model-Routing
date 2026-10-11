@@ -4,6 +4,37 @@ All notable changes to the `route` plugin. This file is the source of truth from
 onward; releases 0.9.0 and earlier live in the git tags and their GitHub Releases, and
 the fuller narrative for every version is in `docs/agent/PROGRESS.md` and its archive.
 
+## [0.14.0] - 2026-10-11
+
+The route agents are opt-in: the main session works alone until the user runs
+`/route:route` or asks for a role by name, and each role now has its own command for a
+single dispatch.
+
+### Added
+
+- `/route:scout`, `/route:builder`, `/route:reviewer` and `/route:scribe`. Each asks for
+  one dispatch of that role from the slash menu, without loading the playbook, and
+  authorizes only that dispatch. The main session reads the config, passes
+  `models.<role>` as `model`, and builds the role's input: a `Files`/`Verify` brief for
+  builder, the diff and the verify lines for reviewer (it cannot run `git`), named
+  destination paths for scribe. A role that is off falls back to the main session. All
+  four were run end to end against a throwaway project, one dispatch each, USD 0.17-0.23
+  per run.
+- The SessionStart roster names these commands for the roles that are live.
+
+### Changed
+
+- **Opt-in dispatch.** The `route` skill is user-invoked only
+  (`disable-model-invocation`). The SessionStart brief, the agent descriptions and the
+  cost hints say the route agents are dispatched only after the user runs `/route:route`
+  or names one; without that, the read and discovery hints point at narrower reads
+  instead of scout, and the first-production-write reminder asks the main session to
+  check the review triggers itself.
+
+### Breaking
+
+- The main session no longer dispatches route agents on its own initiative.
+
 ## [0.13.0] - 2026-10-09
 
 The main session now decides whether to delegate, a builder works only from a spec, and
