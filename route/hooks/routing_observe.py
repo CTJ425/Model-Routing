@@ -147,8 +147,10 @@ def roster_clause(cfg, bookkeeping: bool) -> str:
                 "work itself.")
     return (
         " %s.\n  Once the user opts in, dispatch without asking, by scoped name (%s)."
+        "\n  The user asks for a single dispatch of one role with %s."
         % ("; ".join(ROSTER_CLAUSE[r] for r in live),
-                               ", ".join("`route:%s`" % r for r in live))
+           ", ".join("`route:%s`" % r for r in live),
+           ", ".join("`/route:%s`" % r for r in live))
     )
 
 

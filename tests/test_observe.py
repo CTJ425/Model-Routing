@@ -81,6 +81,30 @@ def test_the_playbook_and_the_agents_wait_for_the_user():
         assert "after the user runs `/route:route`" in head, role
 
 
+@pytest.mark.parametrize("role", ["scout", "builder", "reviewer", "scribe"])
+def test_each_role_has_a_user_only_dispatch_command(role):
+    """/route:<role> is the user asking for that agent by name: only the user may run
+    it, and it must dispatch that agent at the configured tier with the user's text."""
+    import os
+    with open(os.path.join(PLUGIN, "commands", role + ".md"), encoding="utf-8") as fh:
+        text = fh.read()
+    head, body = text.split("\n---", 1)
+    assert head.startswith("---\n")
+    assert "\ndisable-model-invocation: true" in head
+    assert "\ndescription: " in head and "\nargument-hint: " in head
+    assert "$ARGUMENTS" in body
+    assert 'subagent_type: "route:%s"' % role in body
+    assert "`models.%s`" % role in body
+    assert "`roles.%s.enabled`" % role in body
+    assert "not the rest of the session" in body
+
+
+def test_brief_names_the_per_role_commands(project):
+    text = brief(project)
+    for role in ("scout", "builder", "reviewer", "scribe"):
+        assert "`/route:%s`" % role in text
+
+
 def test_brief_no_longer_orders_the_skill_or_threatens_a_prompt(project):
     text = brief(project)
     assert "load the" not in text.split("**`/route:route`**")[0]

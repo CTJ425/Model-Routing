@@ -10,7 +10,7 @@
 | **reviewer** | 子代理人 (Subagent) | `sonnet` (xhigh effort, 80 turns) | 比對 Diff 與 Spec，檢查 7 大風險觸發器 | 修復問題、提出修復建議、執行任何指令 |
 | **scribe** | 子代理人 (Subagent) | `haiku` (medium effort, 90 turns) | 將任務成果謄寫至 `docs/agent/` 追蹤記錄 | 撰寫生產程式碼 |
 
-**子代理人採手動啟用 (Opt-in)**：平常主會話自己做，不會派發 `route:*` 子代理人；需要時由使用者執行 `/route:route` 載入流程手冊，之後該會話內的派發才視為預先授權，派給誰、何時派仍由主會話判斷。插件只提供角色清單、成本資訊與提示，不強制走流程。子代理人的權限邊界則透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
+**子代理人採手動啟用 (Opt-in)**：平常主會話自己做，不會派發 `route:*` 子代理人；需要時由使用者執行 `/route:route` 載入流程手冊，之後該會話內的派發才視為預先授權，派給誰、何時派仍由主會話判斷。只想派單一角色做一件事時，可改用 `/route:scout`、`/route:builder`、`/route:reviewer`、`/route:scribe`。插件只提供角色清單、成本資訊與提示，不強制走流程。子代理人的權限邊界則透過 `PreToolUse` Hooks 進行強制攔截與分類防護。Hook 採用安全防護優先原則，並在輸入格式異常時預設放行 (Fail-open) 以避免阻斷主會話。
 
 ---
 
@@ -43,6 +43,17 @@ claude plugin install route@route
 /route:init      # 透過互動問答建立 .claude/route.config.json 配置檔
 /route:config    # 檢視或動態調整各角色開關、模型等級、審查政策與防護門檻
 ```
+
+需要單獨派某個角色做一件事時，不必先載入整份流程手冊：
+
+```
+/route:scout <問題>       # 唯讀查詢：對應程式碼位置，或壓縮長篇 log
+/route:builder <任務>     # 主會話先寫好含 Files 與 Verify 的簡報，再交給 builder 實作
+/route:reviewer <範圍>    # 主會話附上 diff、意圖與驗證結果，reviewer 只回報問題
+/route:scribe <紀錄內容>  # 寫入追蹤文件，或撰寫 commit message
+```
+
+這四個指令都設有 `disable-model-invocation: true`，只有使用者能執行；每次執行只授權那一次派發，不像 `/route:route` 會對整個會話預先授權。主會話仍會讀取 `.claude/route.config.json`，依 `models.<role>` 帶入 `model` 參數；角色若已停用，就改由主會話自己處理。
 
 ---
 
